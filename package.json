@@ -1,5 +1,5 @@
 {
-  "name": "customrag",
+  "name": "custom-retrieval-engine",
   "version": "1.0.0",
   "private": true,
   "description": "Custom Retrieval Engine - vector search algorithms (HNSW, KD-Tree, Brute Force) and grounded RAG, deployed as Vercel serverless functions",
