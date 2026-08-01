@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorDB — vector search + RAG</title>
+<meta name="description" content="A from-scratch vector database: HNSW, KD-Tree and brute force search side by side, plus a document store and grounded RAG. Deployed as Vercel serverless functions.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="VectorDB — vector search + RAG">
+<meta property="og:description" content="HNSW, KD-Tree and brute force search from scratch, plus a document store and grounded RAG pipeline.">
+<meta property="og:image" content="https://vectordb-vercel.vercel.app/og.png">
+<meta property="og:url" content="https://vectordb-vercel.vercel.app">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="VectorDB — vector search + RAG">
+<meta name="twitter:description" content="HNSW, KD-Tree and brute force search from scratch, plus a document store and grounded RAG pipeline.">
+<meta name="twitter:image" content="https://vectordb-vercel.vercel.app/og.png">
+<style>
+:root {
+  --bg:      #171512;
+  --card:    #201d19;
+  --border:  #2c2925;
+  --border2: #3d3933;
+  --ink:     #ece7de;
+  --muted:   #a0988c;
+  --accent:  #d95c3f;
+  --accent-h:#e56b4d;
+  --cs:      #6b9ee8;
+  --math:    #b573c9;
+  --food:    #e2a34d;
+  --sports:  #49b587;
+  --doc:     #34c4b8;
+  --red:     #e0605a;
+  --green:   #5fc089;
+  --ok-bg:   #1a2b20;
+  --ok-border: #2e5c3d;
+  --err-bg:  #2b1d1b;
+  --err-border: #6a3a34;
+  --q-bg:    #2a2118;
+  --q-border:#4a3c2e;
+  --mono:    ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+  --sans:    -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 13px; line-height: 1.45;
+  height: 100vh; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+/* header */
+header {
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 12px 22px; display: flex; align-items: center; gap: 14px; flex-shrink: 0;
+}
+header h1 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+header .sub { font-size: 12px; color: var(--muted); }
+header .spacer { flex: 1; }
+.pill {
+  font-size: 11px; padding: 4px 10px; border-radius: 20px;
+  border: 1px solid var(--border2); color: var(--muted); background: var(--bg);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.pill.ok { color: var(--green); border-color: var(--ok-border); }
+.pill.ok::before { background: var(--green); }
+.pill.err { color: var(--red); border-color: var(--err-border); }
+.pill.err::before { background: var(--red); }
+.pill.mono { font-family: var(--mono); font-size: 11px; }
+#statsLabel { color: var(--muted); }
+
+/* layout */
+.layout { display: flex; flex: 1; overflow: hidden; }
+.left-panel {
+  width: 252px; flex-shrink: 0; background: var(--card);
+  border-right: 1px solid var(--border); overflow-y: auto; padding: 18px 16px;
+  display: flex; flex-direction: column; gap: 22px;
+}
+.center-panel { flex: 1; position: relative; overflow: hidden; background: var(--card); }
+#scatter { display: block; width: 100%; height: 100%; }
+.right-panel {
+  width: 384px; flex-shrink: 0; background: var(--card);
+  border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* tabs */
+.tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tab {
+  flex: 1; padding: 11px 6px; text-align: center; font-size: 12px; font-weight: 500;
+  cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent;
+  user-select: none;
+}
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.tab-content { display: none; flex: 1; overflow-y: auto; padding: 18px 16px; flex-direction: column; gap: 22px; }
+.tab-content.on { display: flex; }
+
+/* shared form controls */
+.sec {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px;
+}
+input[type=text], select, textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2); color: var(--ink);
+  padding: 8px 10px; border-radius: 5px; font-family: var(--sans); font-size: 13px;
+  outline: none; transition: border-color .15s;
+}
+input[type=text]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 104px; line-height: 1.55; }
+select { appearance: auto; }
+select option { background: var(--card); }
+input[type=range] { width: 100%; accent-color: var(--accent); background: transparent; border: none; padding: 0; }
+button {
+  width: 100%; padding: 8px 14px; border: none; border-radius: 5px; cursor: pointer;
+  font-family: var(--sans); font-size: 13px; font-weight: 600; transition: background .15s;
+}
+.btn-p { background: var(--accent); color: #fff; }
+.btn-p:hover { background: var(--accent-h); }
+.btn-p:disabled { background: var(--border2); color: var(--muted); cursor: wait; }
+.btn-s { background: var(--bg); color: var(--ink); border: 1px solid var(--border2); }
+.btn-s:hover { background: var(--border); }
+.btn-s:disabled { opacity: .5; cursor: wait; }
+.btn-g { background: var(--bg); color: var(--green); border: 1px solid var(--ok-border); }
+.btn-g:hover { background: var(--ok-bg); }
+.btn-g:disabled { opacity: .5; cursor: wait; }
+
+.algo-row { display: flex; border: 1px solid var(--border2); border-radius: 5px; overflow: hidden; }
+.algo-btn {
+  flex: 1; padding: 7px 4px; background: var(--bg); color: var(--muted);
+  font-size: 11px; font-weight: 600; cursor: pointer; text-align: center; border-right: 1px solid var(--border2);
+  font-family: var(--sans); user-select: none;
+}
+.algo-btn:last-child { border-right: none; }
+.algo-btn:hover { color: var(--ink); }
+.algo-btn.on { background: var(--card); color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+
+.legend { display: flex; flex-direction: column; gap: 6px; }
+.leg-row { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--ink); }
+.dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+/* results */
+.results { display: flex; flex-direction: column; gap: 8px; }
+.rcard { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.rcard:hover { border-color: var(--border2); }
+.rrank { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.rmeta { font-size: 13px; line-height: 1.45; margin-bottom: 7px; }
+.rfoot { display: flex; align-items: center; gap: 8px; }
+.rcat { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 3px; }
+.rdist { font-family: var(--mono); font-size: 10px; color: var(--muted); flex: 1; text-align: right; }
+.del {
+  background: transparent; color: var(--muted); border: 1px solid var(--border2);
+  border-radius: 4px; cursor: pointer; font-size: 11px; padding: 2px 8px; width: auto; font-weight: 500;
+}
+.del:hover { color: var(--red); border-color: var(--err-border); background: transparent; }
+
+/* latency / benchmark / HNSW layers */
+.lat-big { font-family: var(--mono); font-size: 30px; font-weight: 600; color: var(--accent); }
+.lat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+.bench { display: flex; flex-direction: column; gap: 10px; }
+.brow  { display: flex; flex-direction: column; gap: 3px; }
+.blabel { display: flex; justify-content: space-between; font-size: 11px; }
+.btrack { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.bfill  { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.layers { display: flex; flex-direction: column; gap: 6px; }
+.lrow   { display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: var(--mono); }
+.lnum   { width: 22px; text-align: right; color: var(--accent); }
+.ltrack { flex: 1; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.lfill  { height: 100%; background: var(--accent); border-radius: 3px; opacity: .75; transition: width .35s; }
+.lcount { width: 84px; text-align: right; color: var(--muted); }
+#vecCvs { display: block; width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; }
+
+/* document list */
+.doc-list { display: flex; flex-direction: column; gap: 8px; }
+.dcard { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.dcard-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.dcard-preview { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 7px; }
+.dcard-foot { display: flex; justify-content: space-between; align-items: center; }
+.dcard-words { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+/* provider status */
+.groq-status { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 11px 13px; font-size: 12px; line-height: 1.7; }
+.groq-status.ok { border-color: var(--ok-border); }
+.groq-status.err { border-color: var(--err-border); }
+.st-label { display: inline-block; min-width: 86px; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+
+/* chat */
+.chat-history { display: flex; flex-direction: column; gap: 12px; }
+.chat-q { background: var(--q-bg); border: 1px solid var(--q-border); border-radius: 6px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.chat-a { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+.chat-a-label { font-family: var(--mono); font-size: 10px; letter-spacing: .05em; color: var(--green); margin-bottom: 7px; }
+.chat-a-text { font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+.chat-ctx { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 9px; }
+.chat-ctx-label { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.ctx-chip {
+  display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 12px; margin: 2px;
+  background: var(--card); border: 1px solid var(--border2); color: var(--ink); cursor: pointer;
+}
+.ctx-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ctx-expand { display: none; font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 6px; padding: 9px; background: var(--card); border: 1px solid var(--border); border-radius: 5px; }
+.thinking { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--muted); }
+.spinner { width: 13px; height: 13px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.typing::after {
+  content: ""; display: inline-block; width: 2px; height: 1.05em;
+  vertical-align: -.15em; background: var(--accent); margin-left: 2px;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* tooltip */
+#tip {
+  position: fixed; display: none; background: var(--card); border: 1px solid var(--border2);
+  border-radius: 5px; padding: 7px 11px; font-size: 12px; pointer-events: none;
+  max-width: 240px; z-index: 200; line-height: 1.5;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .5);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>VectorDB</h1>
+  <span class="sub">HNSW &middot; KD-Tree &middot; Brute Force &middot; RAG</span>
+  <span class="spacer"></span>
+  <span class="pill" id="groqBadge">Checking&hellip;</span>
+  <span class="pill mono" id="statsLabel">loading&hellip;</span>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div>
+      <div class="sec">Query demo vectors</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <input type="text" id="qInput" placeholder="binary tree, sushi, basketball" />
+        <button class="btn-p" onclick="runSearch()">Search</button>
+      </div>
+    </div>
+    <div>
+      <div class="sec">Algorithm</div>
+      <div class="algo-row">
+        <div class="algo-btn on" data-algo="hnsw"      onclick="setAlgo(this)">HNSW</div>
+        <div class="algo-btn"   data-algo="kdtree"     onclick="setAlgo(this)">KD-Tree</div>
+        <div class="algo-btn"   data-algo="bruteforce" onclick="setAlgo(this)">Brute</div>
+      </div>
+    </div>
+    <div>
+      <div class="sec">Distance metric</div>
+      <select id="metric">
+        <option value="cosine">Cosine similarity</option>
+        <option value="euclidean">Euclidean distance</option>
+        <option value="manhattan">Manhattan distance</option>
+      </select>
+    </div>
+    <div>
+      <div class="sec">Top-K: <span id="kLabel">5</span></div>
+      <input type="range" id="kSlider" min="1" max="10" value="5"
+             oninput="document.getElementById('kLabel').textContent=this.value">
+    </div>
+    <div>
+      <div class="sec">Categories</div>
+      <div class="legend">
+        <div class="leg-row"><div class="dot" style="background:var(--cs)"></div>CS / Algorithms</div>
+        <div class="leg-row"><div class="dot" style="background:var(--math)"></div>Mathematics</div>
+        <div class="leg-row"><div class="dot" style="background:var(--food)"></div>Food &amp; Cooking</div>
+        <div class="leg-row"><div class="dot" style="background:var(--sports)"></div>Sports &amp; Games</div>
+        <div class="leg-row"><div class="dot" style="background:var(--doc)"></div>Documents (RAG)</div>
+      </div>
+    </div>
+    <div>
+      <div class="sec">Insert a demo vector</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <input type="text" id="addMeta" placeholder="Description" />
+        <select id="addCat">
+          <option value="cs">CS / Algorithms</option>
+          <option value="math">Mathematics</option>
+          <option value="food">Food &amp; Cooking</option>
+          <option value="sports">Sports &amp; Games</option>
+        </select>
+        <button class="btn-s" onclick="addVector()">Insert</button>
+      </div>
+    </div>
+    <div>
+      <div class="sec">Benchmark</div>
+      <button class="btn-s" onclick="runBenchmark()">Compare all algorithms</button>
+    </div>
+  </div>
+
+  <!-- CENTER: SCATTER PLOT -->
+  <div class="center-panel"><canvas id="scatter"></canvas></div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="tabs">
+      <div class="tab on"  onclick="switchTab('search')">Search</div>
+      <div class="tab"     onclick="switchTab('docs')">Documents</div>
+      <div class="tab"     onclick="switchTab('rag')">Ask AI</div>
+    </div>
+
+    <!-- TAB: SEARCH -->
+    <div class="tab-content on" id="tab-search">
+      <div>
+        <div class="sec">Search latency</div>
+        <div class="lat-big" id="latBig">&mdash;</div>
+        <div class="lat-sub" id="latSub">no query yet</div>
+      </div>
+      <div>
+        <div class="sec">Top matches</div>
+        <div class="results" id="results">
+          <div style="color:var(--muted);font-size:12px">Run a search to see results.</div>
+        </div>
+      </div>
+      <div>
+        <div class="sec">Query embedding (16D)</div>
+        <canvas id="vecCvs" height="76"></canvas>
+      </div>
+      <div id="benchSec" style="display:none">
+        <div class="sec">Algorithm comparison</div>
+        <div class="bench" id="benchBars"></div>
+      </div>
+      <div>
+        <div class="sec">HNSW graph layers</div>
+        <div class="layers" id="layers">
+          <div style="color:var(--muted);font-size:12px">Loading&hellip;</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: DOCUMENTS -->
+    <div class="tab-content" id="tab-docs">
+      <div>
+        <div class="sec">Providers status</div>
+        <div class="groq-status" id="groqStatus">Checking&hellip;</div>
+      </div>
+      <div>
+        <div class="sec">Insert a document</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <input type="text" id="docTitle" placeholder="Document title or topic" />
+          <textarea id="docText" placeholder="Paste notes, a textbook section, or lecture content.
+
+Long text is split into overlapping chunks; each chunk gets a real embedding through the OpenRouter API."></textarea>
+          <button class="btn-g" id="insertDocBtn" onclick="insertDocument()">Embed &amp; insert</button>
+          <div id="insertStatus" style="font-size:12px;color:var(--muted)"></div>
+        </div>
+      </div>
+      <div>
+        <div class="sec">Stored documents (<span id="docCountLabel">0</span>)</div>
+        <div class="doc-list" id="docList">
+          <div style="color:var(--muted);font-size:12px">No documents yet. Insert some above.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: ASK AI (RAG) -->
+    <div class="tab-content" id="tab-rag">
+      <div>
+        <div class="sec">Ask a question</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <textarea id="ragQuestion" rows="3" placeholder="What is dynamic programming?
+Explain how HNSW search works."></textarea>
+          <div style="display:flex;gap:7px">
+            <select id="ragK" style="width:auto;flex-shrink:0">
+              <option value="2">Top 2</option>
+              <option value="3" selected>Top 3</option>
+              <option value="5">Top 5</option>
+            </select>
+            <button class="btn-g" id="askBtn" onclick="askAI()" style="flex:1">Ask</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">The answer is grounded in your documents. Embeddings run through OpenRouter; answer generation runs through Groq.</div>
+        </div>
+      </div>
+      <div>
+        <div class="sec">Conversation</div>
+        <div class="chat-history" id="chatHistory">
+          <div style="color:var(--muted);font-size:12px">Ask a question about your inserted documents.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+const API  = '/api';
+const DIMS = 16;
+const COL  = { cs:'#6b9ee8', math:'#b573c9', food:'#e2a34d', sports:'#49b587', doc:'#34c4b8', default:'#7d766c' };
+const DIM_COL = ['#6b9ee8','#6b9ee8','#6b9ee8','#6b9ee8','#b573c9','#b573c9','#b573c9','#b573c9',
+                 '#e2a34d','#e2a34d','#e2a34d','#e2a34d','#49b587','#49b587','#49b587','#49b587'];
+
+let allItems = [], pcaPoints = [], hitIds = new Set(), queryPt = null;
+let hoverItem = null, pulse = 0, selAlgo = 'hnsw', searchResults = [];
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['search','docs','rag'];
+    t.classList.toggle('on', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('on'));
+  document.getElementById('tab-' + name).classList.add('on');
+  if (name === 'docs') loadDocList();
+}
+
+const KW = {
+  cs:     ['algorithm','data','tree','graph','array','linked','hash','stack','queue','sort','binary','dynamic','programming','recursion','complexity','pointer','node','search','insert','bfs','dfs','heap','trie','database','index','query','sql','vector','embedding','semantic','network','distributed','cache','memory','runtime','thread','process','async','library','framework'],
+  math:   ['calculus','matrix','probability','theorem','integral','derivative','linear','algebra','equation','function','prime','modular','combinatorics','permutation','eigenvalue','statistics','proof','geometry','trig','logarithm','limit','sequence','series','fraction','ratio'],
+  food:   ['food','pizza','sushi','ramen','pasta','recipe','cook','eat','restaurant','dish','ingredient','flavor','spice','noodle','bread','croissant','taco','fish','rice','soup','biryani','curry','kebab','tikka','samosa','dosa','naan','paneer','masala','burger','fries','steak','chicken','beef','pork','lamb','cheese','egg','meat','grill','barbecue','roast','fried','salad','sandwich','pancake','waffle','cake','cookie','pie','pastry','chocolate','dessert','cream','coffee','tea','wine','beer','juice','tomato','onion','garlic','mango','banana'],
+  sports: ['sport','basketball','football','tennis','chess','swim','game','play','score','team','athlete','competition','match','tournament','olympic','dribble','tackle','serve','soccer','cricket','hockey','golf','boxing','wrestling','cycling','running','marathon','yoga','gym','fitness','baseball','volleyball','rugby','badminton']
+};
+
+function textToEmbedding(text) {
+  const t = text.toLowerCase(), ws = t.split(/\s+/);
+  const s = {cs:0,math:0,food:0,sports:0};
+  for (const w of ws)
+    for (const [cat, kws] of Object.entries(KW))
+      for (const kw of kws) if (w.includes(kw)||kw.startsWith(w)) { s[cat]+=0.35; break; }
+  const mx = Math.max(...Object.values(s), 0.01);
+  const n = v => Math.min(v/mx*0.88, 0.94);
+  const jitter = () => (Math.random()-.5)*.04;
+  const emb = new Array(16).fill(0.08);
+  const fill = (i,score) => {
+    if (score<.01) return;
+    const b = n(score);
+    emb[i]=Math.max(.05,b+jitter()); emb[i+1]=Math.max(.05,b+jitter());
+    emb[i+2]=Math.max(.05,b*.92+jitter()); emb[i+3]=Math.max(.05,b*.87+jitter());
+  };
+  fill(0,s.cs); fill(4,s.math); fill(8,s.food); fill(12,s.sports);
+  return emb;
+}
+
+function pca2D(embs) {
+  const n = embs.length, d = embs[0].length;
+  if (n < 2) return embs.map(() => [0,0]);
+  const mean = new Array(d).fill(0);
+  for (const e of embs) for (let i=0;i<d;i++) mean[i]+=e[i]/n;
+  const X = embs.map(e => e.map((v,i)=>v-mean[i]));
+  function powerIter(X,excl) {
+    let v = new Array(d).fill(0).map(()=>Math.random()-.5);
+    if (excl) { let dot=v.reduce((s,vi,i)=>s+vi*excl[i],0); v=v.map((vi,i)=>vi-dot*excl[i]); }
+    let nrm = Math.sqrt(v.reduce((s,vi)=>s+vi*vi,0));
+    v = v.map(vi=>vi/nrm);
+    for (let it=0;it<200;it++) {
+      const Xv=X.map(xi=>xi.reduce((s,xij,j)=>s+xij*v[j],0));
+      const nv=new Array(d).fill(0);
+      for (let k=0;k<n;k++) for (let j=0;j<d;j++) nv[j]+=X[k][j]*Xv[k];
+      if (excl) { let dot=nv.reduce((s,vi,i)=>s+vi*excl[i],0); for (let i=0;i<d;i++) nv[i]-=dot*excl[i]; }
+      nrm=Math.sqrt(nv.reduce((s,vi)=>s+vi*vi,0));
+      if (nrm<1e-10) break;
+      const prev=v.slice(); v=nv.map(vi=>vi/nrm);
+      if (v.reduce((s,vi,i)=>s+(vi-prev[i])**2,0)<1e-12) break;
+    }
+    return v;
+  }
+  const pc1=powerIter(X,null), pc2=powerIter(X,pc1);
+  return X.map(x=>[x.reduce((s,v,i)=>s+v*pc1[i],0),x.reduce((s,v,i)=>s+v*pc2[i],0)]);
+}
+
+const sc=document.getElementById('scatter'), ctx=sc.getContext('2d');
+const T=name=>getComputedStyle(document.body).getPropertyValue(name).trim();
+let bounds={minX:-1,maxX:1,minY:-1,maxY:1};
+
+function resize() { const r=sc.parentElement.getBoundingClientRect(); sc.width=r.width; sc.height=r.height; }
+window.addEventListener('resize', resize);
+
+function w2c(wx,wy) {
+  const P=70,W=sc.width,H=sc.height,rx=bounds.maxX-bounds.minX||1,ry=bounds.maxY-bounds.minY||1;
+  return [P+((wx-bounds.minX)/rx)*(W-2*P), H-P-((wy-bounds.minY)/ry)*(H-2*P)];
+}
+
+function drawFrame() {
+  ctx.clearRect(0,0,sc.width,sc.height);
+  ctx.fillStyle=T('--card'); ctx.fillRect(0,0,sc.width,sc.height);
+  ctx.strokeStyle=T('--border'); ctx.lineWidth=1;
+  for (let i=0;i<=8;i++) {
+    const tx=70+(i/8)*(sc.width-140),ty=70+(i/8)*(sc.height-140);
+    ctx.beginPath();ctx.moveTo(tx,70);ctx.lineTo(tx,sc.height-70);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(70,ty);ctx.lineTo(sc.width-70,ty);ctx.stroke();
+  }
+  ctx.fillStyle=T('--muted'); ctx.font='11px ui-monospace, Consolas, monospace';
+  ctx.fillText('PC1',sc.width-40,sc.height-24);
+  ctx.save();ctx.translate(22,sc.height/2+50);ctx.rotate(-Math.PI/2);ctx.fillText('PC2',0,0);ctx.restore();
+  ctx.fillStyle=T('--muted'); ctx.font='12px ' + getComputedStyle(document.body).fontFamily;
+  ctx.fillText('PCA projection of the vector space',80,28);
+
+  if (queryPt && hitIds.size>0) {
+    const [qx,qy]=w2c(queryPt.x,queryPt.y);
+    for (const pt of pcaPoints) {
+      if (!hitIds.has(pt.item.id)) continue;
+      const [px,py]=w2c(pt.x,pt.y);
+      ctx.strokeStyle='rgba(236,231,222,0.16)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.moveTo(qx,qy);ctx.lineTo(px,py);ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  for (const pt of pcaPoints) {
+    const [cx,cy]=w2c(pt.x,pt.y);
+    const col=COL[pt.item.category]||COL.default;
+    const isHit=hitIds.has(pt.item.id), r=isHit?9:6;
+    if (isHit) {
+      ctx.beginPath();ctx.arc(cx,cy,r+6+Math.sin(pulse)*2.5,0,2*Math.PI);
+      ctx.strokeStyle=col+'55';ctx.lineWidth=1.5;ctx.stroke();
+    }
+    ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.fillStyle=col;ctx.fill();
+    if (hoverItem&&hoverItem.id===pt.item.id) {
+      ctx.beginPath();ctx.arc(cx,cy,r+4,0,2*Math.PI);ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();
+    }
+  }
+  if (queryPt) {
+    const [qx,qy]=w2c(queryPt.x,queryPt.y);
+    ctx.beginPath();
+    ctx.moveTo(qx,qy-11);ctx.lineTo(qx+8,qy+6);ctx.lineTo(qx-8,qy+6);ctx.closePath();
+    ctx.fillStyle=T('--accent');ctx.fill();
+    ctx.fillStyle=T('--muted');ctx.font='10px ui-monospace, Consolas, monospace';
+    ctx.fillText('query',qx+12,qy+4);
+  }
+  if (!pcaPoints.length) {
+    ctx.fillStyle=T('--muted');ctx.font='13px ' + getComputedStyle(document.body).fontFamily;ctx.textAlign='center';
+    ctx.fillText('Connecting to VectorDB\u2026',sc.width/2,sc.height/2);ctx.textAlign='left';
+  }
+  pulse+=0.05;
+  requestAnimationFrame(drawFrame);
+}
+
+sc.addEventListener('mousemove', e => {
+  const rect=sc.getBoundingClientRect(),mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  hoverItem=null; let best=18;
+  for (const pt of pcaPoints) {
+    const [cx,cy]=w2c(pt.x,pt.y),d=Math.hypot(mx-cx,my-cy);
+    if (d<best){best=d;hoverItem=pt.item;}
+  }
+  const tip=document.getElementById('tip');
+  if (hoverItem) {
+    const col=COL[hoverItem.category]||COL.default;
+    tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-8)+'px';
+    tip.innerHTML=`<span style="color:${col}">[${hoverItem.category}]</span><br>${hoverItem.metadata}`;
+  } else tip.style.display='none';
+});
+sc.addEventListener('mouseleave',()=>{hoverItem=null;document.getElementById('tip').style.display='none';});
+
+async function loadItems() {
+  try {
+    const r = await fetch(API+'/items');
+    allItems = await r.json();
+    if (allItems.length >= 2) {
+      const coords = pca2D(allItems.map(v=>v.embedding));
+      pcaPoints = allItems.map((item,i)=>({x:coords[i][0],y:coords[i][1],item}));
+      let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+      for (const p of pcaPoints){x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}
+      const px=(x1-x0)*.18||.1,py=(y1-y0)*.18||.1;
+      bounds={minX:x0-px,maxX:x1+px,minY:y0-py,maxY:y1+py};
+    }
+    document.getElementById('statsLabel').textContent=allItems.length+' vectors · '+DIMS+' dims';
+  } catch(_) {}
+}
+
+function setAlgo(el) {
+  document.querySelectorAll('.algo-btn').forEach(b=>b.classList.remove('on'));
+  el.classList.add('on'); selAlgo=el.dataset.algo;
+}
+
+async function runSearch() {
+  const text=document.getElementById('qInput').value.trim(); if(!text)return;
+  const emb=textToEmbedding(text),k=parseInt(document.getElementById('kSlider').value);
+  const metric=document.getElementById('metric').value;
+  const url=`${API}/search?v=${emb.join(',')}&k=${k}&metric=${metric}&algo=${selAlgo}`;
+  try {
+    const r=await fetch(url), data=await r.json();
+    searchResults=data.results||[]; hitIds=new Set(searchResults.map(r=>r.id));
+    const us=data.latencyUs||0;
+    document.getElementById('latBig').textContent=us<1000?us+' μs':(us/1000).toFixed(2)+' ms';
+    document.getElementById('latSub').textContent=selAlgo.toUpperCase()+'  ·  '+metric+'  ·  k='+k;
+    if (searchResults.length>0){
+      let sx=0,sy=0,sw=0;
+      for (let i=0;i<Math.min(3,searchResults.length);i++){
+        const pt=pcaPoints.find(p=>p.item.id===searchResults[i].id);
+        if(pt){const w=1/(i+1);sx+=pt.x*w;sy+=pt.y*w;sw+=w;}
+      }
+      if(sw>0)queryPt={x:sx/sw+(Math.random()-.5)*.015,y:sy/sw+(Math.random()-.5)*.015};
+    }
+    renderResults(searchResults); drawVecChart(emb);
+  } catch(_){alert('Cannot reach the API — is the server running?');}
+}
+
+document.getElementById('qInput').addEventListener('keydown',e=>{if(e.key==='Enter')runSearch();});
+
+function renderResults(results) {
+  if (!results||!results.length){document.getElementById('results').innerHTML='<div style="color:var(--muted);font-size:12px">No results</div>';return;}
+  document.getElementById('results').innerHTML=results.map((r,i)=>{
+    const col=COL[r.category]||COL.default;
+    return `<div class="rcard" onmouseenter="hoverItem={id:${r.id}}" onmouseleave="hoverItem=null">
+      <div class="rrank">#${i+1}</div>
+      <div class="rmeta">${r.metadata}</div>
+      <div class="rfoot">
+        <span class="rcat" style="background:${col}14;color:${col};border:1px solid ${col}44">${r.category.toUpperCase()}</span>
+        <span class="rdist">dist: ${r.distance.toFixed(5)}</span>
+        <button class="del" onclick="deleteItem(${r.id})">Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function drawVecChart(emb) {
+  const vc=document.getElementById('vecCvs'),W=vc.parentElement.clientWidth;
+  vc.width=W;const vx=vc.getContext('2d');
+  vx.clearRect(0,0,W,76);vx.fillStyle=T('--card');vx.fillRect(0,0,W,76);
+  const bw=(W-4)/DIMS;
+  for (let i=0;i<DIMS;i++){
+    const h=emb[i]*58,x=2+i*bw,col=DIM_COL[i];
+    vx.fillStyle=col;vx.fillRect(x+1,63-h,bw-2,h);
+  }
+  vx.font='8px ui-monospace, Consolas, monospace';vx.textAlign='center';
+  [['CS',0],['MATH',4],['FOOD',8],['SPORT',12]].forEach(([lbl,gi],i)=>{
+    vx.fillStyle=Object.values(COL)[i]+'aa';vx.fillText(lbl,2+(gi+1.5)*bw,74);
+  });
+  vx.textAlign='left';
+}
+
+async function runBenchmark() {
+  const text=document.getElementById('qInput').value.trim()||'binary tree algorithm';
+  const emb=textToEmbedding(text),metric=document.getElementById('metric').value;
+  try {
+    const r=await fetch(`${API}/benchmark?v=${emb.join(',')}&k=5&metric=${metric}`);
+    const d=await r.json();
+    document.getElementById('benchSec').style.display='block';
+    const mx=Math.max(d.bruteforceUs,d.kdtreeUs,d.hnswUs,1);
+    document.getElementById('benchBars').innerHTML=[
+      {lbl:'Brute Force',us:d.bruteforceUs,col:'#e0605a'},
+      {lbl:'KD-Tree',    us:d.kdtreeUs,    col:'#6b9ee8'},
+      {lbl:'HNSW',       us:d.hnswUs,      col:'#b573c9'},
+    ].map(({lbl,us,col})=>{
+      const pct=Math.max((us/mx)*100,2),disp=us<1000?us+' μs':(us/1000).toFixed(2)+' ms';
+      return `<div class="brow"><div class="blabel"><span style="color:${col}">${lbl}</span><span style="color:var(--muted)">${disp}</span></div><div class="btrack"><div class="bfill" style="width:${pct}%;background:${col}"></div></div></div>`;
+    }).join('');
+  } catch(_) {}
+}
+
+async function loadHNSW() {
+  try {
+    const r=await fetch(API+'/hnsw-info'), d=await r.json();
+    const maxN=d.nodesPerLayer[0]||1;
+    document.getElementById('layers').innerHTML=d.nodesPerLayer.map((cnt,lyr)=>{
+      const pct=Math.max((cnt/maxN)*100,2),edg=d.edgesPerLayer[lyr]||0;
+      return `<div class="lrow"><div class="lnum">L${lyr}</div><div class="ltrack"><div class="lfill" style="width:${pct}%"></div></div><div class="lcount">${cnt}n · ${edg}e</div></div>`;
+    }).join('')||'<div style="color:var(--muted);font-size:12px">Empty</div>';
+  } catch(_) {}
+}
+
+async function addVector() {
+  const meta=document.getElementById('addMeta').value.trim(),cat=document.getElementById('addCat').value;
+  if(!meta)return;
+  const emb=textToEmbedding(meta+' '+cat);
+  try {
+    await fetch(API+'/insert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({metadata:meta,category:cat,embedding:emb})});
+    document.getElementById('addMeta').value='';
+    await loadItems();loadHNSW();
+  } catch(_) {}
+}
+
+async function deleteItem(id) {
+  try {
+    await fetch(`${API}/delete/${id}`,{method:'DELETE'});
+    searchResults=searchResults.filter(r=>r.id!==id);hitIds.delete(id);
+    renderResults(searchResults);await loadItems();loadHNSW();
+  } catch(_) {}
+}
+
+async function checkGroqStatus() {
+  try {
+    const r=await fetch(API+'/status'), d=await r.json();
+    const badge=document.getElementById('groqBadge');
+    const box=document.getElementById('groqStatus');
+    if (d.embedAvailable && d.groqAvailable) {
+      badge.className='pill ok'; badge.textContent='Ready';
+      box.className='groq-status ok';
+      box.innerHTML=`<span class="st-label">Embed</span> ${d.embedModel} <span style="color:var(--muted)">· OpenRouter</span><br>`+
+        `<span class="st-label">Generate</span> ${d.genModel} <span style="color:var(--muted)">· Groq</span><br>`+
+        `<span class="st-label">Dims</span> ${d.docDims||'set on first insert'}<br>`+
+        `<span class="st-label">Documents</span> ${d.docCount}`;
+    } else {
+      badge.className='pill err';
+      const missing=[];
+      if(!d.embedKeySet) missing.push('OPENROUTER_API_KEY');
+      if(!d.apiKeySet)    missing.push('GROQ_API_KEY');
+      badge.textContent=missing.length?('Missing '+missing.join(' + ')):'API unreachable';
+      box.className='groq-status err';
+      let steps='';
+      let n=1;
+      if(!d.embedKeySet) steps+=`${n++}. OPENROUTER_API_KEY (sk-or-v1...) at openrouter.ai/keys<br>`;
+      if(!d.apiKeySet)   steps+=`${n++}. GROQ_API_KEY (gsk_...) at console.groq.com<br>`;
+      if(!steps) steps='Provider unreachable — check your internet connection.';
+      box.innerHTML=`<span style="color:var(--red);font-weight:600">RAG needs API keys</span><br><br>`+
+        `<span class="st-label">Set:</span><br>`+steps+`Then restart the server`;
+    }
+  } catch(_) {}
+}
+
+async function insertDocument() {
+  const title=document.getElementById('docTitle').value.trim();
+  const text=document.getElementById('docText').value.trim();
+  const btn=document.getElementById('insertDocBtn');
+  const status=document.getElementById('insertStatus');
+  if(!title||!text){status.textContent='Need both a title and text.';return;}
+
+  btn.disabled=true; btn.textContent='Embedding…';
+  status.innerHTML='<span style="color:var(--muted)">Embedding document chunks via OpenRouter\u2026</span>';
+
+  try {
+    const r=await fetch(API+'/doc/insert',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({title,text})
+    });
+    const d=await r.json();
+    if (d.error) {
+      status.innerHTML=`<span style="color:var(--red)">${d.error}</span>`;
+    } else {
+      status.innerHTML=`<span style="color:var(--green)">Inserted ${d.chunks} chunk(s) · ${d.dims}D embeddings</span>`;
+      document.getElementById('docTitle').value='';
+      document.getElementById('docText').value='';
+
+          // Insert a 16D fake vector into the visualizer DB so it shows up on the map
+          const emb16 = textToEmbedding(title + ' ' + text);
+          fetch(API+'/insert', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({metadata: title, category: 'doc', embedding: emb16})
+          }).then(() => { loadItems().then(loadHNSW); });
+
+      loadDocList(); checkGroqStatus();
+    }
+  } catch(_) {
+    status.innerHTML='<span style="color:var(--red)">Server error</span>';
+  }
+  btn.disabled=false; btn.textContent='Embed & insert';
+}
+
+async function loadDocList() {
+  try {
+    const r=await fetch(API+'/doc/list'), docs=await r.json();
+    document.getElementById('docCountLabel').textContent=docs.length;
+    if (!docs.length) {
+      document.getElementById('docList').innerHTML='<div style="color:var(--muted);font-size:12px">No documents yet.</div>';
+      return;
+    }
+    document.getElementById('docList').innerHTML=docs.map(d=>`
+      <div class="dcard">
+        <div class="dcard-title">${d.title}</div>
+        <div class="dcard-preview">${d.preview}</div>
+        <div class="dcard-foot">
+          <span class="dcard-words">${d.words} words</span>
+          <button class="del" onclick="deleteDoc(${d.id})">Remove</button>
+        </div>
+      </div>`).join('');
+  } catch(_) {}
+}
+
+async function deleteDoc(id) {
+  try {
+    await fetch(`${API}/doc/delete/${id}`,{method:'DELETE'});
+    loadDocList(); checkGroqStatus();
+  } catch(_) {}
+}
+
+document.getElementById('ragQuestion').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.ctrlKey)askAI();
+});
+
+async function askAI() {
+  const question=document.getElementById('ragQuestion').value.trim();
+  if(!question)return;
+  const k=parseInt(document.getElementById('ragK').value);
+  const btn=document.getElementById('askBtn');
+  btn.disabled=true; btn.textContent='Thinking…';
+
+  const history=document.getElementById('chatHistory');
+  history.innerHTML='';
+
+  const qDiv=document.createElement('div'); qDiv.className='chat-q';
+  qDiv.textContent=question; history.appendChild(qDiv);
+
+  const thinkDiv=document.createElement('div'); thinkDiv.className='thinking';
+  thinkDiv.innerHTML='<div class="spinner"></div>Retrieving context & generating answer…';
+  history.appendChild(thinkDiv);
+  history.scrollTop=history.scrollHeight;
+
+  fetch(API+'/doc/search', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({question, k})
+  })
+  .then(res=>res.json())
+  .then(data => {
+    if (data.contexts && data.contexts.length > 0) {
+      hitIds = new Set();
+      let sx=0, sy=0, sw=0;
+      data.contexts.forEach((ctx, i) => {
+        const pt = pcaPoints.find(p => p.item.category === 'doc' && ctx.title.startsWith(p.item.metadata));
+        if (pt) {
+          hitIds.add(pt.item.id);
+          const w = 1/(i+1); sx += pt.x*w; sy += pt.y*w; sw += w;
+        }
+      });
+      if (sw > 0) queryPt = {x: sx/sw + (Math.random()-.5)*.015, y: sy/sw + (Math.random()-.5)*.015};
+    } else {
+      hitIds = new Set();
+      const emb16 = textToEmbedding(question);
+      fetch(`${API}/search?v=${emb16.join(',')}&k=3&metric=cosine&algo=hnsw`)
+        .then(res2=>res2.json())
+        .then(data2 => {
+          if (data2.results && data2.results.length>0) {
+            let sx=0,sy=0,sw=0;
+            for (let i=0;i<Math.min(3,data2.results.length);i++) {
+              const pt=pcaPoints.find(p=>p.item.id===data2.results[i].id);
+              if(pt){const w=1/(i+1);sx+=pt.x*w;sy+=pt.y*w;sw+=w;}
+            }
+            if(sw>0) queryPt={x:sx/sw+(Math.random()-.5)*.015,y:sy/sw+(Math.random()-.5)*.015};
+          }
+        }).catch(()=>{});
+    }
+  }).catch(()=>{});
+
+  try {
+    const r=await fetch(API+'/doc/ask',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question,k})
+    });
+    const d=await r.json();
+    thinkDiv.remove();
+
+    const aDiv=document.createElement('div'); aDiv.className='chat-a';
+
+    if (d.error) {
+      aDiv.innerHTML=`<div class="chat-a-label">ERROR</div><div class="chat-a-text" style="color:var(--red)">${d.error}</div>`;
+    } else {
+      aDiv.innerHTML=`<div class="chat-a-label">${d.model||'llm'}</div>`+
+        `<div class="chat-a-text" id="typeTarget"></div>`+
+        `<div class="chat-ctx">`+
+          `<div class="chat-ctx-label">Retrieved context (${d.contexts.length} chunks)</div>`+
+          d.contexts.map((c,i)=>`<span class="ctx-chip" onclick="toggleCtx(${i})">#${i+1} ${c.title} · ${c.distance.toFixed(3)}</span>`+
+            `<div class="ctx-expand" id="ctx-${i}">${c.text}</div>`).join('')+
+        `</div>`;
+      history.appendChild(aDiv);
+
+      if (d.contexts.length === 0) {
+        const moreBtn=document.createElement('button');
+        moreBtn.className='btn-s';
+        moreBtn.textContent='Search the web for more';
+        moreBtn.style.marginTop='10px';
+        moreBtn.onclick=async ()=>{
+          moreBtn.disabled=true; moreBtn.textContent='Fetching from Wikipedia\u2026';
+          try {
+            const res=await fetch(API+'/agent/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:question,maxArticles:1})});
+            const dd=await res.json();
+            if (dd.error) { moreBtn.textContent=dd.error; moreBtn.disabled=false; return; }
+            loadItems().then(loadHNSW);
+            document.getElementById('ragQuestion').value=question;
+            askAI();
+          } catch(_) {
+            moreBtn.textContent='Fetch failed'; moreBtn.disabled=false;
+          }
+        };
+        aDiv.appendChild(moreBtn);
+      }
+
+      const target=aDiv.querySelector('#typeTarget');
+      target.classList.add('typing');
+      const full=d.answer; let i=0;
+      const timer=setInterval(()=>{
+        if(i>=full.length){clearInterval(timer);target.classList.remove('typing');return;}
+        const chunk=full.slice(i,i+3); target.textContent+=chunk; i+=3;
+        history.scrollTop=history.scrollHeight;
+      },18);
+    }
+
+    if (d.error) history.appendChild(aDiv);
+
+  } catch(e) {
+    thinkDiv.remove();
+    const err=document.createElement('div');err.className='chat-a';
+    err.innerHTML='<div class="chat-a-label">ERROR</div><div class="chat-a-text" style="color:var(--red)">Server error — is the backend running?</div>';
+    history.appendChild(err);
+  }
+
+  document.getElementById('ragQuestion').value='';
+  btn.disabled=false; btn.textContent='Ask';
+  history.scrollTop=history.scrollHeight;
+}
+
+function toggleCtx(i) {
+  const el=document.getElementById('ctx-'+i);
+  el.style.display=el.style.display==='block'?'none':'block';
+}
+
+resize(); drawFrame();
+loadItems().then(loadHNSW);
+checkGroqStatus();
+</script>
+</body>
+</html>

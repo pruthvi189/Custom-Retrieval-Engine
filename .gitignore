@@ -1,0 +1,40 @@
+# C++ original (this repo is the Node/Vercel port — the C++ source stays local)
+main.cpp
+httplib.h
+
+# Compiled binaries
+*.exe
+*.o
+*.out
+a.out
+
+# Local API keys — never commit these
+keys.h
+
+# MSYS2 runtime DLLs (copied next to the binary to run standalone)
+libssl-3-x64.dll
+libcrypto-3-x64.dll
+libstdc++-6.dll
+libwinpthread-1.dll
+libgcc_s_seh-1.dll
+
+# Build directories
+build/
+bin/
+
+# IDE files
+.vscode/
+.idea/
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.vercel/
+*.log
+
+.vercel
+.env*
