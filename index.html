@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VectorDB — vector search + RAG</title>
+<title>Custom Retrieval Engine — vector search + RAG</title>
 <meta name="description" content="A from-scratch vector database: HNSW, KD-Tree and brute force search side by side, plus a document store and grounded RAG. Deployed as Vercel serverless functions.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="VectorDB — vector search + RAG">
+<meta property="og:title" content="Custom Retrieval Engine — vector search + RAG">
 <meta property="og:description" content="HNSW, KD-Tree and brute force search from scratch, plus a document store and grounded RAG pipeline.">
-<meta property="og:image" content="https://vectordb-vercel.vercel.app/og.png">
-<meta property="og:url" content="https://vectordb-vercel.vercel.app">
+<meta property="og:image" content="https://customrag.vercel.app/og.png">
+<meta property="og:url" content="https://customrag.vercel.app">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="VectorDB — vector search + RAG">
+<meta name="twitter:title" content="Custom Retrieval Engine — vector search + RAG">
 <meta name="twitter:description" content="HNSW, KD-Tree and brute force search from scratch, plus a document store and grounded RAG pipeline.">
-<meta name="twitter:image" content="https://vectordb-vercel.vercel.app/og.png">
+<meta name="twitter:image" content="https://customrag.vercel.app/og.png">
 <style>
 :root {
   --bg:      #171512;
@@ -224,7 +224,7 @@ button {
 <body>
 
 <header>
-  <h1>VectorDB</h1>
+  <h1>Custom Retrieval Engine</h1>
   <span class="sub">HNSW &middot; KD-Tree &middot; Brute Force &middot; RAG</span>
   <span class="spacer"></span>
   <span class="pill" id="groqBadge">Checking&hellip;</span>
@@ -522,7 +522,7 @@ function drawFrame() {
   }
   if (!pcaPoints.length) {
     ctx.fillStyle=T('--muted');ctx.font='13px ' + getComputedStyle(document.body).fontFamily;ctx.textAlign='center';
-    ctx.fillText('Connecting to VectorDB\u2026',sc.width/2,sc.height/2);ctx.textAlign='left';
+    ctx.fillText('Connecting to Custom Retrieval Engine\u2026',sc.width/2,sc.height/2);ctx.textAlign='left';
   }
   pulse+=0.05;
   requestAnimationFrame(drawFrame);

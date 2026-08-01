@@ -239,7 +239,7 @@ async function docAsk(question, k) {
 async function wikiSearch(topic) {
   const url = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(topic) +
     '&format=json&srlimit=3';
-  const r = await fetch(url, { headers: { 'User-Agent': 'VectorDB-RAG/1.0' } });
+  const r = await fetch(url, { headers: { 'User-Agent': 'CustomRetrievalEngine-RAG/1.0' } });
   const d = await r.json();
   return (d.query && d.query.search ? d.query.search : []).map(s => s.title);
 }
@@ -247,7 +247,7 @@ async function wikiSearch(topic) {
 async function wikiFetch(title) {
   const url = 'https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&redirects=1&format=json&titles=' +
     encodeURIComponent(title);
-  const r = await fetch(url, { headers: { 'User-Agent': 'VectorDB-RAG/1.0' } });
+  const r = await fetch(url, { headers: { 'User-Agent': 'CustomRetrievalEngine-RAG/1.0' } });
   const d = await r.json();
   const pages = d.query && d.query.pages ? Object.values(d.query.pages) : [];
   for (const pg of pages) {

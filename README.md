@@ -1,10 +1,10 @@
-# VectorDB
+# Custom Retrieval Engine
 
 A vector database built from scratch — three search indexes, a document store,
 and a grounded RAG pipeline, running as Vercel serverless functions behind a
 single-page UI.
 
-**Live demo: [https://vectordb-vercel.vercel.app](https://vectordb-vercel.vercel.app)**
+**Live demo: [https://customrag.vercel.app](https://customrag.vercel.app)**
 
 I've always been curious about what actually goes on inside tools like Pinecone
 or Weaviate, so instead of pulling in a library I wrote the whole thing myself.
@@ -116,7 +116,7 @@ Base path: `/api`
 Example:
 
 ```bash
-curl -X POST https://vectordb-vercel.vercel.app/api/doc/ask \
+curl -X POST https://customrag.vercel.app/api/doc/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"What is dynamic programming?","k":3}'
 ```

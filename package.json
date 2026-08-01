@@ -1,8 +1,8 @@
 {
-  "name": "vectordb-vercel",
+  "name": "customrag",
   "version": "1.0.0",
   "private": true,
-  "description": "VectorDB - vector search algorithms (HNSW, KD-Tree, Brute Force) and grounded RAG, deployed as Vercel serverless functions",
+  "description": "Custom Retrieval Engine - vector search algorithms (HNSW, KD-Tree, Brute Force) and grounded RAG, deployed as Vercel serverless functions",
   "engines": {
     "node": ">=18"
   },
