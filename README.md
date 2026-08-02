@@ -274,4 +274,3 @@ Then set `OPENROUTER_API_KEY` and `GROQ_API_KEY` as Vercel environment variables
 
 ---
 
-*This is the Node port of an original C++ implementation of the same algorithms. The C++ source stays out of this repository.*
