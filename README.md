@@ -1,11 +1,11 @@
 # Custom Retrieval Engine
 
-A vector retrieval engine built **from scratch** — HNSW, KD-Tree, and brute-force search implemented by hand, backed by a chunked document store and a grounded RAG pipeline. Everything runs as Vercel serverless functions behind a single-page UI.
+A vector retrieval engine built **from scratch** — HNSW, KD-Tree, and brute-force search implemented by hand in pure Python, backed by a chunked document store and a grounded RAG pipeline. Everything runs as Vercel serverless Python functions behind a single-page UI.
 
-I've always wondered what actually lives inside tools like Pinecone or Weaviate. So instead of importing one, I wrote the whole thing — distance metrics, heaps, the indexes, the chunker, the RAG glue — in plain Node.js, small enough to read front to back.
+I've always wondered what actually lives inside tools like Pinecone or Weaviate. So instead of importing one, I wrote the whole thing — distance metrics, heaps, the indexes, the chunker, the RAG glue — by hand, small enough to read front to back.
 
 > [!IMPORTANT]
-> Unlike most RAG projects, this does **not** rely on an existing vector database for the core engine. The three search indexes — **HNSW**, **KD-Tree**, and **Brute Force** — are implemented directly in `api/_lib/core.js`, and a live benchmark lets you time all three against the same query.
+> Unlike most RAG projects, this does **not** rely on an existing vector database for the core engine. The three search indexes — **HNSW**, **KD-Tree**, and **Brute Force** — are implemented directly in `engine/`, and a live benchmark lets you time all three against the same query.
 
 ---
 
@@ -34,7 +34,8 @@ The demo needs **zero API keys** for vector search, benchmarking, and the visual
 - **In-browser PCA visualizer** — a live 2D projection of the vector space, color-coded by category.
 - **HNSW graph inspector** — per-layer node/edge structure rendered from `/api/hnsw-info`.
 - **Optional PostgreSQL + pgvector persistence** — survives serverless cold starts via `DATABASE_URL`.
-- **Serverless deployment** — one Vercel function routing every `/api/*` endpoint.
+- **Serverless deployment** — one FastAPI app routing every `/api/*` endpoint.
+- **Offline scale/accuracy benchmark** — `scripts/benchmark.py` renders `plots/benchmark.png` with numpy + matplotlib.
 
 ---
 
@@ -167,35 +168,41 @@ This is more than a RAG chatbot: you never paste or curate the corpus yourself, 
 
 ## Benchmarks
 
-Measured live on Vercel: 22 items, 16D vectors, cosine distance, `k=5` (three runs of `/api/benchmark`).
+Two ways to measure, both honest:
 
-| Run | Brute Force | KD-Tree | HNSW |
-|---|---|---|---|
-| 1 | 136 µs | 157 µs | 153 µs |
-| 2 | 52 µs | 67 µs | 82 µs |
-| 3 | 17 µs | 31 µs | 109 µs |
-
-> [!TIP]
-> At this dataset size all three are sub-millisecond and **overhead dominates** — these numbers are illustrative, not a verdict. The point of the benchmark endpoint is that it exists: feed it more data and watch how each index scales. Document search (1536D) is intentionally brute-force at this scale.
+- **Live** — `GET /api/benchmark` times all three algorithms on the same query and dataset in a running server. At demo scale all three are sub-millisecond and **overhead dominates** — these numbers are illustrative, not a verdict.
+- **Offline scale** — `python scripts/benchmark.py` generates synthetic clustered datasets (numpy), times each index across growing sizes, measures **recall@k** against brute force, and renders `plots/benchmark.png`. Approximate indexes earn their recall numbers there: HNSW is fast and exact on some draws but measurably misses true k-NN on clustered data, which is exactly why the brute-force baseline exists.
 
 ---
 
 ## Project Structure
 
 ```
-api/
-  handler.js          one serverless function routing every /api/* path
-  _lib/
-    core.js           the engine: distance metrics, heaps, BruteForce,
-                      KDTree, HNSW, VectorDB, DocumentDB, chunker, demo data
-    store.js          persistence (in-memory, or Postgres + pgvector when
-                      DATABASE_URL is set), RAG, and agent ingestion logic
-    providers.js      OpenRouter embeddings + Groq generation clients
-    http.js           small CORS / JSON helpers
+engine/               pure-Python search core (no numpy on the server path)
+  distance.py         euclidean, cosine, manhattan
+  heaps.py            MinHeap / MaxHeap on (distance, id)
+  bruteforce.py       the O(n) reference index
+  kdtree.py           axis-aligned kd-tree with hyperplane pruning
+  hnsw.py             hierarchical navigable small-world graph
+  chunking.py         250-word / 30-overlap chunker
+  text_features.py    category keywords + graph_embedding (16D)
+  demo.py             the 20-item demo corpus
+  item.py             Item dataclass shared by every index
+  vectordb.py         VectorDB (16D, three sync indexes) + DocumentDB (1536D)
+  numpy_ops.py        optional numpy-accelerated distance/top-k (scripts only)
+api/                  FastAPI app (one serverless function)
+  index.py            route table: every /api/* endpoint, exact JS contract
+  store.py            persistence (in-memory or pgvector), RAG, web ingestion
+  providers.py        OpenRouter embeddings + Groq generation clients
+  db.py               pg + pgvector schema/connection helpers
+scripts/
+  run_server.py       uvicorn dev server
+  parity_check.py     contract checks against the live/in-process API
+  benchmark.py        offline scale + recall benchmark → plots/benchmark.png
+  generate_dataset.py synthetic dataset writer (data/dataset.json, .csv)
+tests/                106 pytest cases: engine, API contract, RAG, chunking
 index.html            the single-page UI (search, benchmark, PCA plot, RAG)
-test/
-  smoke.js            local smoke test (npm test)
-vercel.json           rewrites /api/* to the handler
+vercel.json           rewrites /api/* to the FastAPI app
 ```
 
 ---
@@ -232,8 +239,9 @@ curl -X POST https://customrag.vercel.app/api/doc/ask \
 ## Running Locally
 
 ```bash
-npm install
-vercel dev
+python -m venv .venv
+.venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python scripts/run_server.py        # http://127.0.0.1:8000
 ```
 
 Vector search, benchmark, and the PCA plot work with **no keys at all**. You only need provider keys for the Ask AI / document features:
@@ -244,10 +252,11 @@ GROQ_API_KEY         # answer generation
 DATABASE_URL         # optional: Postgres with pgvector
 ```
 
-Smoke test (with `vercel dev` running):
+Tests and contract checks:
 
 ```bash
-npm test
+.venv/Scripts/python -m pytest -q                  # 106 tests, no keys needed
+.venv/Scripts/python scripts/parity_check.py       # live or in-process contract check
 ```
 
 ---
@@ -258,7 +267,7 @@ npm test
 vercel deploy --prod
 ```
 
-Then set `OPENROUTER_API_KEY` and `GROQ_API_KEY` as Vercel environment variables (plus `DATABASE_URL` for persistence) and redeploy once. Storage falls back to in-memory if `DATABASE_URL` is absent — everything still works, it just resets on cold starts.
+The API is a single FastAPI app in `api/index.py` running on the Vercel Python runtime; `vercel.json` rewrites `/api/*` to it. Set `OPENROUTER_API_KEY` and `GROQ_API_KEY` as Vercel environment variables (plus `DATABASE_URL` for persistence) and redeploy once. Storage falls back to in-memory if `DATABASE_URL` is absent — everything still works, it just resets on cold starts.
 
 ---
 
@@ -274,3 +283,4 @@ Then set `OPENROUTER_API_KEY` and `GROQ_API_KEY` as Vercel environment variables
 
 ---
 
+*This is the Python port of an original C++ implementation of the same algorithms, via an intermediate Node version. The C++ source stays out of this repository.*

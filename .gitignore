@@ -1,4 +1,4 @@
-# C++ original (this repo is the Node/Vercel port — the C++ source stays local)
+# C++ original (this repo is the Python/Vercel port — the C++ source stays local)
 main.cpp
 httplib.h
 
@@ -38,3 +38,12 @@ node_modules/
 
 .vercel
 .env*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+plots/
+data/
