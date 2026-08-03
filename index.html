@@ -845,7 +845,7 @@ async function askAI() {
         `</div>`;
       history.appendChild(aDiv);
 
-      if (d.contexts.length === 0) {
+      if (d.notFound || d.contexts.length === 0) {
         const moreBtn=document.createElement('button');
         moreBtn.className='btn-s';
         moreBtn.textContent='Search the web for more';
