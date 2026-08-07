@@ -301,6 +301,7 @@ button {
       <div class="tab on"  onclick="switchTab('search')">Search</div>
       <div class="tab"     onclick="switchTab('docs')">Documents</div>
       <div class="tab"     onclick="switchTab('rag')">Ask AI</div>
+      <div class="tab"     onclick="switchTab('agent')">Agent</div>
     </div>
 
     <!-- TAB: SEARCH -->
@@ -383,6 +384,43 @@ Explain how HNSW search works."></textarea>
       </div>
     </div>
 
+    <!-- TAB: AGENT -->
+    <div class="tab-content" id="tab-agent">
+      <div>
+        <div class="sec">Research Question</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <textarea id="agentQuestion" rows="3" placeholder="What are the latest developments in mixture-of-experts architectures?
+Compare transformers vs RNNs for long-context tasks."></textarea>
+          <div style="display:flex;gap:7px">
+            <select id="agentMaxIter" style="width:auto;flex-shrink:0">
+              <option value="3">3 iterations</option>
+              <option value="5" selected>5 iterations</option>
+              <option value="7">7 iterations</option>
+            </select>
+            <button class="btn-g" id="agentBtn" onclick="runAgent()" style="flex:1">Run Agent</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">The agent plans, searches local docs, Wikipedia, and the live web, then synthesizes an answer.</div>
+        </div>
+      </div>
+      <div>
+        <div class="sec">Execution Steps</div>
+        <div class="chat-history" id="agentSteps" style="max-height:280px;overflow-y:auto">
+          <div style="color:var(--muted);font-size:12px">Enter a question and click Run Agent.</div>
+        </div>
+      </div>
+      <div>
+        <div class="sec">Final Answer</div>
+        <div class="chat-a" id="agentAnswer" style="display:none">
+          <div class="chat-a-label" id="agentModel"></div>
+          <div class="chat-a-text" id="agentAnswerText"></div>
+        </div>
+        <div id="agentSources" style="display:none;margin-top:12px">
+          <div class="chat-ctx-label">Sources Used</div>
+          <div class="chat-ctx" id="agentSourcesList"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -400,7 +438,7 @@ let hoverItem = null, pulse = 0, selAlgo = 'hnsw', searchResults = [];
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const names = ['search','docs','rag'];
+    const names = ['search','docs','rag','agent'];
     t.classList.toggle('on', names[i] === name);
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('on'));
@@ -890,10 +928,154 @@ async function askAI() {
   history.scrollTop=history.scrollHeight;
 }
 
-function toggleCtx(i) {
-  const el=document.getElementById('ctx-'+i);
-  el.style.display=el.style.display==='block'?'none':'block';
+async function runAgent() {
+  const question = document.getElementById('agentQuestion').value.trim();
+  if (!question) return;
+  const maxIter = parseInt(document.getElementById('agentMaxIter').value);
+  const btn = document.getElementById('agentBtn');
+  const stepsDiv = document.getElementById('agentSteps');
+  const answerDiv = document.getElementById('agentAnswer');
+  const answerText = document.getElementById('agentAnswerText');
+  const modelLabel = document.getElementById('agentModel');
+  const sourcesDiv = document.getElementById('agentSources');
+  const sourcesList = document.getElementById('agentSourcesList');
+
+  btn.disabled = true; btn.textContent = 'Running…';
+  answerDiv.style.display = 'none';
+  sourcesDiv.style.display = 'none';
+
+  stepsDiv.innerHTML = '';
+  addAgentStep(stepsDiv, 'Planning', 'Analyzing question and planning research strategy…', 'thinking');
+
+  try {
+    const res = await fetch(API + '/agent/ask', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: question, maxIterations: maxIter})
+    });
+    const data = await res.json();
+
+    // Clear thinking step
+    stepsDiv.innerHTML = '';
+
+    // Render steps
+    if (data.steps && data.steps.length > 0) {
+      for (const step of data.steps) {
+        const toolLabels = {
+          doc_search: 'Searching Local Knowledge',
+          wiki_search: 'Searching Wikipedia',
+          web_search: 'Searching Web',
+          finish: 'Writing Final Answer'
+        };
+        const label = toolLabels[step.tool] || step.tool;
+        const status = step.error ? 'error' : 'done';
+        const detail = step.error
+          ? `Error: ${step.error}`
+          : `${step.results_count} results, ${step.sources_count} sources`;
+        addAgentStep(stepsDiv, label, detail, status);
+      }
+    }
+
+    // Reflection step if present
+    if (data.steps && data.steps.length > 0) {
+      const lastStep = data.steps[data.steps.length - 1];
+      if (lastStep.tool !== 'finish') {
+        addAgentStep(stepsDiv, 'Evaluating Evidence', 'Checking if evidence is sufficient…', 'thinking');
+        // Small delay to show the step
+        await new Promise(r => setTimeout(r, 300));
+        // Update to done
+        const lastStepEl = stepsDiv.lastElementChild;
+        if (lastStepEl) lastStepEl.querySelector('.step-status').textContent = '✓ Done';
+      }
+    }
+
+    // Final answer
+    answerDiv.style.display = 'block';
+    modelLabel.textContent = `Iterations: ${data.iterations} · Sources: ${data.sources?.length || 0}`;
+    typewriter(answerText, data.answer || 'No answer generated.');
+
+    // Sources
+    if (data.sources && data.sources.length > 0) {
+      sourcesDiv.style.display = 'block';
+      sourcesList.innerHTML = data.sources.map((s, i) => {
+        const typeColors = {
+          local_doc: 'var(--doc)',
+          wikipedia: 'var(--cs)',
+          web: 'var(--math)',
+          web_answer: 'var(--math)'
+        };
+        const col = typeColors[s.type] || 'var(--muted)';
+        const title = s.title || s.content || `Source ${i+1}`;
+        const url = s.url ? `<a href="${s.url}" target="_blank" style="color:${col};text-decoration:underline">Open</a>` : '';
+        return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+          <span style="width:10px;height:10px;border-radius:2px;background:${col}"></span>
+          <span>${title}</span> ${url}
+        </div>`;
+      }).join('');
+    }
+
+    // Update graph visualization with any new wiki/doc sources
+    if (data.sources) {
+      updateAgentGraph(data.sources);
+    }
+
+  } catch (e) {
+    stepsDiv.innerHTML = '';
+    addAgentStep(stepsDiv, 'Error', 'Failed to run agent — is the backend running?', 'error');
+    console.error(e);
+  }
+
+  btn.disabled = false; btn.textContent = 'Run Agent';
+  stepsDiv.scrollTop = stepsDiv.scrollHeight;
 }
+
+function addAgentStep(container, label, detail, status) {
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);';
+  const icons = {
+    thinking: '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div>',
+    done: '<span style="color:var(--green);font-size:14px">✓</span>',
+    error: '<span style="color:var(--red);font-size:14px">✗</span>'
+  };
+  const icon = icons[status] || icons.thinking;
+  div.innerHTML = `
+    <div style="flex-shrink:0;width:20px;text-align:center">${icon}</div>
+    <div style="flex:1">
+      <div style="font-weight:600;font-size:13px">${label}</div>
+      <div class="step-status" style="font-size:11px;color:var(--muted);margin-top:2px">${detail}</div>
+    </div>
+  `;
+  container.appendChild(div);
+}
+
+function typewriter(el, text) {
+  el.textContent = '';
+  el.classList.add('typing');
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i >= text.length) {
+      clearInterval(timer);
+      el.classList.remove('typing');
+      return;
+    }
+    const chunk = text.slice(i, i + 3);
+    el.textContent += chunk;
+    i += 3;
+    el.parentElement.scrollTop = el.parentElement.scrollHeight;
+  }, 15);
+}
+
+function updateAgentGraph(sources) {
+  // Check if any Wikipedia or doc sources were permanently added
+  const hasNewKnowledge = sources.some(s => s.type === 'wikipedia' || s.type === 'local_doc');
+  if (hasNewKnowledge) {
+    loadItems().then(loadHNSW);
+  }
+}
+
+document.getElementById('agentQuestion').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) runAgent();
+});
 
 resize(); drawFrame();
 loadItems().then(loadHNSW);

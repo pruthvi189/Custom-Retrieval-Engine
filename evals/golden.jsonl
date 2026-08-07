@@ -1,0 +1,15 @@
+{"query": "What is a binary tree?", "category": "document_retrieval"}
+{"query": "Explain HNSW algorithm", "category": "document_retrieval"}
+{"query": "What is cosine similarity?", "category": "document_retrieval"}
+{"query": "Define dynamic programming", "category": "document_retrieval"}
+{"query": "Latest AI agent frameworks in 2024", "category": "web_search"}
+{"query": "What are the key developments in LLMs in 2024?", "category": "web_search"}
+{"query": "What is the Mixture of Experts architecture?", "category": "web_search"}
+{"query": "How do AI agents use RAG for question answering?", "category": "multi_tool"}
+{"query": "Compare vector databases: HNSW vs KD-tree", "category": "multi_tool"}
+{"query": "What are the components of an autonomous AI agent?", "category": "multi_tool"}
+{"query": "Explain the difference between semantic search and keyword search", "category": "multi_tool"}
+{"query": "How does an agent decide which tool to use?", "category": "reasoning"}
+{"query": "What makes a good research question?", "category": "reasoning"}
+{"query": "Why might an agent choose web search over local documents?", "category": "reasoning"}
+{"query": "How does reflection improve agent accuracy?", "category": "reasoning"}

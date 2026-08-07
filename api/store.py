@@ -29,8 +29,65 @@ doc_db = DocumentDB()
 _WIKI_UA = "CustomRetrievalEngine-RAG/1.0"
 
 
+# ---- Common helpers --------------------------------------------------------------------
+
+DISTANCE_THRESHOLD = 0.7
+
+
+def _embed_query(question: str) -> list[float] | None:
+    """Embed a query, return None on failure."""
+    return providers.embed_one(question)
+
+
+def _embedding_error() -> dict:
+    """Standard error response for embedding failures."""
+    return {"error": "Embedding failed via OpenRouter. Check the OPENROUTER_API_KEY env var."}
+
+
+def _search_doc_chunks(q_emb: list[float], k: int, include_text: bool = False) -> list[dict]:
+    """Search doc_chunks by embedding, return list of hit dicts."""
+    if db_active():
+        vec = db.vec_to_string(q_emb)
+        cols = "id, title, text" if include_text else "id, title"
+        rows = db.query(
+            f"SELECT {cols}, embedding <=> %s::vector AS distance "
+            "FROM doc_chunks ORDER BY embedding <=> %s::vector LIMIT %s",
+            [vec, vec, k],
+        )
+        return [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                **({"text": r["text"]} if include_text else {}),
+                "distance": float(r["distance"]),
+            }
+            for r in rows
+            if float(r["distance"]) <= DISTANCE_THRESHOLD
+        ]
+    hits = doc_db.search(q_emb, k, DISTANCE_THRESHOLD)
+    return [
+        {
+            "id": h["item"].id,
+            "title": h["item"].title,
+            **({"text": h["item"].text} if include_text else {}),
+            "distance": h["distance"],
+        }
+        for h in hits
+    ]
+
+
+def _get_doc_count() -> int:
+    """Get total document chunk count."""
+    if db_active():
+        return db.query("SELECT COUNT(*)::int AS n FROM doc_chunks")[0]["n"]
+    return doc_db.size()
+
+
 def db_active() -> bool:
     return db.get_pool() is not None
+
+
+# ---- items / search / insert / delete -------------------------------------------------
 
 
 def _load_items() -> None:
@@ -96,20 +153,20 @@ def insert_item(meta: str, cat: str, emb) -> int:
             "INSERT INTO items (metadata, category, embedding) VALUES (%s, %s, %s::vector) RETURNING id",
             [meta, cat, db.vec_to_string(emb)],
         )
-        id = row[0]["id"]
+        item_id = row[0]["id"]
         with _STATE_LOCK:
-            vdb.insert_raw({"id": id, "metadata": meta, "category": cat, "embedding": emb})
-        return id
+            vdb.insert_raw({"id": item_id, "metadata": meta, "category": cat, "embedding": emb})
+        return item_id
     with _STATE_LOCK:
         return vdb.insert(meta, cat, emb)
 
 
-def delete_item(id: int) -> bool:
+def delete_item(item_id: int) -> bool:
     ensure_demo()
     if db_active():
-        db.query("DELETE FROM items WHERE id = %s", [id])
+        db.query("DELETE FROM items WHERE id = %s", [item_id])
     with _STATE_LOCK:
-        return vdb.remove(id)
+        return vdb.remove(item_id)
 
 
 def benchmark(q, k: int, metric: str) -> dict:
@@ -168,73 +225,32 @@ def doc_list() -> list[dict]:
     return out
 
 
-def doc_delete(id: int) -> bool:
+def doc_delete(chunk_id: int) -> bool:
     ensure_demo()
     if db_active():
-        db.query("DELETE FROM doc_chunks WHERE id = %s", [id])
-    return doc_db.remove(id)
+        db.query("DELETE FROM doc_chunks WHERE id = %s", [chunk_id])
+    return doc_db.remove(chunk_id)
 
 
 def doc_search(question: str, k: int) -> dict:
     ensure_demo()
-    q_emb = providers.embed_one(question)
+    q_emb = _embed_query(question)
     if not q_emb:
-        return {"error": "Embedding failed via OpenRouter. Check the OPENROUTER_API_KEY env var."}
-    if db_active():
-        rows = db.query(
-            "SELECT id, title, embedding <=> %s::vector AS distance "
-            "FROM doc_chunks ORDER BY embedding <=> %s::vector LIMIT %s",
-            [db.vec_to_string(q_emb), db.vec_to_string(q_emb), k],
-        )
-        contexts = [
-            {"id": r["id"], "title": r["title"], "distance": float(r["distance"])}
-            for r in rows
-            if float(r["distance"]) <= 0.7
-        ]
-        return {"contexts": contexts}
-    hits = doc_db.search(q_emb, k, 0.7)
-    return {
-        "contexts": [
-            {"id": h["item"].id, "title": h["item"].title, "distance": h["distance"]}
-            for h in hits
-        ]
-    }
+        return _embedding_error()
+
+    hits = _search_doc_chunks(q_emb, k, include_text=False)
+    contexts = [{"id": h["id"], "title": h["title"], "distance": h["distance"]} for h in hits]
+    return {"contexts": contexts}
 
 
 def doc_ask(question: str, k: int) -> dict:
     ensure_demo()
-    q_emb = providers.embed_one(question)
+    q_emb = _embed_query(question)
     if not q_emb:
-        return {"error": "Embedding failed via OpenRouter. Check the OPENROUTER_API_KEY env var."}
+        return _embedding_error()
 
-    if db_active():
-        doc_count = db.query("SELECT COUNT(*)::int AS n FROM doc_chunks")[0]["n"]
-        rows = db.query(
-            "SELECT id, title, text, embedding <=> %s::vector AS distance "
-            "FROM doc_chunks ORDER BY embedding <=> %s::vector LIMIT %s",
-            [db.vec_to_string(q_emb), db.vec_to_string(q_emb), k],
-        )
-        hits = [
-            {
-                "id": r["id"],
-                "title": r["title"],
-                "text": r["text"],
-                "distance": float(r["distance"]),
-            }
-            for r in rows
-            if float(r["distance"]) <= 0.7
-        ]
-    else:
-        doc_count = doc_db.size()
-        hits = [
-            {
-                "id": h["item"].id,
-                "title": h["item"].title,
-                "text": h["item"].text,
-                "distance": h["distance"],
-            }
-            for h in doc_db.search(q_emb, k, 0.7)
-        ]
+    doc_count = _get_doc_count()
+    hits = _search_doc_chunks(q_emb, k, include_text=True)
 
     if doc_count == 0:
         return {
@@ -266,10 +282,11 @@ def doc_ask(question: str, k: int) -> dict:
     )
     answer = providers.generate(prompt)
     not_found = bool(re.search(r"not found in your documents", answer, re.IGNORECASE))
+    contexts = [{"id": h["id"], "title": h["title"], "distance": h["distance"]} for h in hits]
     return {
         "answer": answer,
         "model": providers.GEN_MODEL,
-        "contexts": hits,
+        "contexts": contexts,
         "docCount": doc_count,
         "notFound": not_found,
     }
@@ -305,14 +322,41 @@ def wiki_fetch(title: str) -> dict | None:
     return None
 
 
-def graph_point_exists(meta: str) -> bool:
-    if db_active():
-        rows = db.query(
-            "SELECT 1 FROM items WHERE metadata = %s AND category = 'doc' LIMIT 1",
-            [meta],
-        )
-        return len(rows) > 0
-    return any(i.metadata == meta and i.category == "doc" for i in vdb.all())
+def _fetch_and_chunk_article(title: str) -> list[tuple[str, str]] | None:
+    """Fetch Wikipedia article and return list of (chunk_title, chunk_text) tuples."""
+    art = wiki_fetch(title)
+    if not art:
+        return None
+    chunks = chunk_text(art["text"], 250, 30)
+    cap = chunks[:10]
+    return [(f"{art['title']} [{i + 1}/{len(cap)}]" if len(cap) > 1 else art["title"], chunk) for i, chunk in enumerate(cap)]
+
+
+def _embed_chunks(chunk_data: list[tuple[str, str]]) -> list[tuple[str, str, list[float]]]:
+    """Embed chunk texts in parallel, return list of (chunk_title, chunk_text, embedding)."""
+    with ThreadPoolExecutor() as ex:
+        texts = [chunk for _, chunk in chunk_data]
+        embs = list(ex.map(providers.embed_one, texts))
+    return [
+        (title, chunk, emb)
+        for (title, chunk), emb in zip(chunk_data, embs)
+        if emb is not None
+    ]
+
+
+def _store_chunks(embedded_chunks: list[tuple[str, str, list[float]]]) -> int:
+    """Store embedded chunks, return count stored."""
+    count = 0
+    for chunk_title, chunk_text, emb in embedded_chunks:
+        store_chunk(chunk_title, chunk_text, emb)
+        count += 1
+    return count
+
+
+def _ensure_graph_point(title: str) -> None:
+    """Ensure article has a 16D graph point for visualization."""
+    if not graph_point_exists(title):
+        insert_item(title, "doc", graph_embedding(title))
 
 
 def web_ingest(topic: str, max_articles: int = 1) -> dict:
@@ -320,36 +364,27 @@ def web_ingest(topic: str, max_articles: int = 1) -> dict:
     titles = wiki_search(topic)
     if not titles:
         return {"error": f'No Wikipedia results for "{topic}".'}
+
     added = []
     for title in titles[:max_articles]:
-        art = wiki_fetch(title)
-        if not art:
+        chunk_data = _fetch_and_chunk_article(title)
+        if not chunk_data:
             continue
-        chunks = chunk_text(art["text"], 250, 30)
-        cap = chunks[:10]
-        with ThreadPoolExecutor() as ex:
-            embs = list(ex.map(providers.embed_one, cap))
-        ids = []
-        for i, chunk in enumerate(cap):
-            emb = embs[i]
-            if not emb:
-                continue
-            chunk_title = f"{art['title']} [{i + 1}/{len(cap)}]" if len(cap) > 1 else art["title"]
-            ids.append(store_chunk(chunk_title, chunk, emb))
-        # Give the article a 16D point on the visualizer graph so fetched
-        # knowledge shows up next to manually inserted documents.
-        if not graph_point_exists(art["title"]):
-            insert_item(art["title"], "doc", graph_embedding(art["title"]))
-        added.append(
-            {
-                "title": art["title"],
-                "chunks": len(cap),
-                "stored": len(ids),
-                "truncated": len(chunks) > len(cap),
-            }
-        )
+
+        embedded = _embed_chunks(chunk_data)
+        stored = _store_chunks(embedded)
+        _ensure_graph_point(title)
+
+        added.append({
+            "title": title,
+            "chunks": len(chunk_data),
+            "stored": stored,
+            "truncated": len(chunk_data) < len(chunk_text(wiki_fetch(title)["text"], 250, 30)) if wiki_fetch(title) else False,
+        })
+
     if not added:
         return {"error": "Could not fetch article content."}
+
     dims = 1536 if db_active() else doc_db.get_dims()
     total = sum(a["stored"] for a in added)
     return {"added": added, "dims": dims, "message": f"Stored {total} chunk(s) from the web."}

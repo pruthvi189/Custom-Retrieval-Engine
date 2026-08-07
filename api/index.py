@@ -30,10 +30,11 @@ load_dotenv(ROOT / ".env.local")
 
 from fastapi import FastAPI, Query, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import Response  # noqa: E402
+from fastapi.responses import Response, FileResponse  # noqa: E402
 from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
 
 import api.store as store  # noqa: E402
+import api.agent as agent  # noqa: E402
 from engine import DIMS  # noqa: E402
 
 app = FastAPI(redirect_slashes=False)
@@ -44,6 +45,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
+
+# Serve frontend
+@app.get("/")
+async def serve_index():
+    return FileResponse(ROOT / "index.html")
 
 _ID_RE = re.compile(r"^\d+$")
 _INT_RE = re.compile(r"^\s*[+-]?\d+")
@@ -226,6 +232,17 @@ async def agent_ingest(request: Request) -> Response:
     result = store.web_ingest(topic, max_articles)
     if result.get("error"):
         return json_response(400, {"error": result["error"]})
+    return json_response(200, result)
+
+
+@app.post("/api/agent/ask")
+async def agent_ask(request: Request) -> Response:
+    body = await read_body(request)
+    question = str(body.get("query", "")).strip()
+    max_iterations = parse_int(str(body.get("maxIterations", "")), 5)
+    if not question:
+        return json_response(400, {"error": "need query"})
+    result = agent.run_agent(question, max_iterations)
     return json_response(200, result)
 
 
