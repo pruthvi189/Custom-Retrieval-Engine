@@ -355,8 +355,19 @@ def _store_chunks(embedded_chunks: list[tuple[str, str, list[float]]]) -> int:
 
 def _ensure_graph_point(title: str) -> None:
     """Ensure article has a 16D graph point for visualization."""
-    if not graph_point_exists(title):
+    if not _graph_point_exists(title):
         insert_item(title, "doc", graph_embedding(title))
+
+
+def _graph_point_exists(meta: str) -> bool:
+    """Check if a graph point for this title already exists."""
+    if db_active():
+        rows = db.query(
+            "SELECT 1 FROM items WHERE metadata = %s AND category = 'doc' LIMIT 1",
+            [meta],
+        )
+        return len(rows) > 0
+    return any(i.metadata == meta and i.category == "doc" for i in vdb.all())
 
 
 def web_ingest(topic: str, max_articles: int = 1) -> dict:
