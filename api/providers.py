@@ -1,4 +1,4 @@
-"""Provider clients - OpenRouter for embeddings, Groq for generation.
+"""Provider clients - OpenRouter for embeddings and generation.
 
 Keys come from env vars only, never from source files.
 """
@@ -10,7 +10,7 @@ import os
 import httpx
 
 EMBED_MODEL = os.environ.get("OPENROUTER_EMBED_MODEL") or "openai/text-embedding-3-small"
-GEN_MODEL = os.environ.get("GROQ_GEN_MODEL") or "llama-3.3-70b-versatile"
+GEN_MODEL = os.environ.get("OPENROUTER_GEN_MODEL") or "meta-llama/llama-3.3-70b-instruct"
 _embed_key = os.environ.get("OPENROUTER_API_KEY", "")
 _groq_key = os.environ.get("GROQ_API_KEY", "")
 
@@ -52,13 +52,14 @@ def embed_available() -> bool:
 
 
 def generate(prompt: str) -> str:
-    if not _groq_key:
-        return "ERROR: GROQ_API_KEY is not set. Add it as a Vercel env var and redeploy."
+    """Generate using OpenRouter (OpenAI-compatible)."""
+    if not _embed_key:
+        return "ERROR: OPENROUTER_API_KEY is not set."
     try:
         r = httpx.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": "Bearer " + _groq_key,
+                "Authorization": "Bearer " + _embed_key,
                 "Content-Type": "application/json",
             },
             json={
@@ -70,7 +71,7 @@ def generate(prompt: str) -> str:
             timeout=60.0,
         )
         if r.status_code != 200:
-            msg = f"Groq API request failed (HTTP {r.status_code})"
+            msg = f"OpenRouter API request failed (HTTP {r.status_code})"
             try:
                 d = r.json()
                 if isinstance(d, dict) and isinstance(d.get("error"), dict) and d["error"].get("message"):
@@ -86,20 +87,25 @@ def generate(prompt: str) -> str:
                 message = choices[0].get("message")
                 if isinstance(message, dict):
                     ans = message.get("content")
-        return ans if ans else "ERROR: Empty response from Groq"
+        return ans if ans else "ERROR: Empty response from OpenRouter"
     except httpx.HTTPError:
-        return "ERROR: Could not reach the Groq API. Check your internet connection."
+        return "ERROR: Could not reach the OpenRouter API. Check your internet connection."
 
 
-def groq_available() -> bool:
-    if not _groq_key:
+def openrouter_available() -> bool:
+    if not _embed_key:
         return False
     try:
         r = httpx.get(
-            "https://api.groq.com/openai/v1/models",
-            headers={"Authorization": "Bearer " + _groq_key},
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": "Bearer " + _embed_key},
             timeout=15.0,
         )
         return r.status_code == 200
     except Exception:
         return False
+
+
+# Backward compatibility
+def groq_available() -> bool:
+    return openrouter_available()

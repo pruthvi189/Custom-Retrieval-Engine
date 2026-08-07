@@ -413,7 +413,7 @@ def status() -> dict:
         doc_count = doc_db.size()
         doc_dims = doc_db.get_dims()
     emb_up = providers.embed_available()
-    groq_up = providers.groq_available()
+    groq_up = providers.openrouter_available()
     return {
         "groqAvailable": groq_up,
         "apiKeySet": bool(os.environ.get("GROQ_API_KEY")),
