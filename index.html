@@ -836,13 +836,15 @@ async function askAI() {
   .then(res=>res.json())
   .then(data => {
     if (data.contexts && data.contexts.length > 0) {
+      const docPt = (title) => pcaPoints
+        .filter(p => p.item.category === 'doc' && title.startsWith(p.item.metadata))
+        .sort((a,b) => b.item.metadata.length - a.item.metadata.length)[0];
       hitIds = new Set();
       data.contexts.forEach((ctx) => {
-        const pt = pcaPoints.find(p => p.item.category === 'doc' && ctx.title.startsWith(p.item.metadata));
+        const pt = docPt(ctx.title);
         if (pt) hitIds.add(pt.item.id);
       });
-      const top = data.contexts[0];
-      const topPt = pcaPoints.find(p => p.item.category === 'doc' && top.title.startsWith(p.item.metadata));
+      const topPt = docPt(data.contexts[0].title);
       if (topPt) queryPt = {x: topPt.x + (Math.random()-.5)*.015, y: topPt.y + (Math.random()-.5)*.015};
     } else {
       hitIds = new Set();
