@@ -82,16 +82,16 @@ def call_planner(prompt: str) -> dict[str, Any]:
         try:
             # Extract JSON from response (handle markdown code blocks)
             # First try to find JSON in markdown code blocks
-            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
-            if not json_match:
+            code_block_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
+            if code_block_match:
+                parsed = json.loads(code_block_match.group(1))
+            else:
                 # Try non-greedy match for standalone JSON
                 json_match = re.search(r"\{.*?\}", response, re.DOTALL)
-            if json_match:
-                # Get the captured group if from code block, else the full match
-                json_str = json_match.group(1) if json_match.group(1) else json_match.group(0)
-                parsed = json.loads(json_str)
-            else:
-                parsed = json.loads(response)
+                if json_match:
+                    parsed = json.loads(json_match.group(0))
+                else:
+                    parsed = json.loads(response)
 
             # Validate required fields
             if all(k in parsed for k in ("tool", "input", "reason")):
