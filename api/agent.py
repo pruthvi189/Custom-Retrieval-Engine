@@ -35,7 +35,7 @@ Current state:
 Observations from previous steps:
 {observations}
 
-Decide your next action. Output ONLY a JSON object matching this schema:
+Decide your next action. Output ONLY a valid JSON object matching this schema:
 {schema}
 
 Rules:
@@ -45,6 +45,7 @@ Rules:
 - "web_search": Search live web for current info (temporary context only)
 - "finish": You have enough evidence to answer. Provide the final answer in "input".
 - Be concise in "reason" - explain why this tool is the right choice now.
+- CRITICAL: Output ONLY the JSON object. No markdown, no code blocks, no extra text.
 """
 
 
@@ -98,17 +99,19 @@ def call_planner(prompt: str) -> dict[str, Any]:
                 if parsed["tool"] in ("doc_search", "wiki_search", "web_search", "finish"):
                     return parsed
 
-        except (json.JSONDecodeError, KeyError):
-            pass
+        except (json.JSONDecodeError, KeyError) as e:
+            if attempt == 0:
+                # Log the response for debugging
+                pass
 
         # Retry with clarification
         if attempt == 0:
-            prompt += "\n\nERROR: Invalid JSON or missing fields. Output ONLY valid JSON matching the schema. No markdown code blocks."
+            prompt += "\n\nERROR: Output ONLY valid JSON. No markdown, no code blocks, no extra text."
 
-    # Fallback: default to web_search on planner failure
+    # Fallback: use the original query for web_search
     return {
         "tool": "web_search",
-        "input": "general information about the topic",
+        "input": prompt.split("Original question: ")[1].split("\n")[0] if "Original question: " in prompt else "search the web",
         "reason": "Planner failed, defaulting to web search",
     }
 
