@@ -81,12 +81,15 @@ def call_planner(prompt: str) -> dict[str, Any]:
         response = providers.generate(prompt)
         try:
             # Extract JSON from response (handle markdown code blocks)
-            # Try to find complete JSON object - non-greedy match
-            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response)
+            # First try to find JSON in markdown code blocks
+            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
             if not json_match:
+                # Try non-greedy match for standalone JSON
                 json_match = re.search(r"\{.*?\}", response, re.DOTALL)
             if json_match:
-                parsed = json.loads(json_match.group(0))
+                # Get the captured group if from code block, else the full match
+                json_str = json_match.group(1) if json_match.group(1) else json_match.group(0)
+                parsed = json.loads(json_str)
             else:
                 parsed = json.loads(response)
 
@@ -100,7 +103,7 @@ def call_planner(prompt: str) -> dict[str, Any]:
 
         # Retry with clarification
         if attempt == 0:
-            prompt += "\n\nERROR: Invalid JSON or missing fields. Output ONLY valid JSON matching the schema."
+            prompt += "\n\nERROR: Invalid JSON or missing fields. Output ONLY valid JSON matching the schema. No markdown code blocks."
 
     # Fallback: default to web_search on planner failure
     return {
