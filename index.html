@@ -985,9 +985,12 @@ async function runAgent() {
         addAgentStep(stepsDiv, 'Evaluating Evidence', 'Checking if evidence is sufficient…', 'thinking');
         // Small delay to show the step
         await new Promise(r => setTimeout(r, 300));
-        // Update to done
+        // Update to done - replace spinner with checkmark
         const lastStepEl = stepsDiv.lastElementChild;
-        if (lastStepEl) lastStepEl.querySelector('.step-status').textContent = '✓ Done';
+        if (lastStepEl) {
+          lastStepEl.querySelector('.step-status').textContent = '✓ Done';
+          lastStepEl.querySelector('div[style*="flex-shrink"]').innerHTML = '<span style="color:var(--green);font-size:14px">✓</span>';
+        }
       }
     }
 
