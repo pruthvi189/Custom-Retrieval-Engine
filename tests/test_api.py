@@ -198,7 +198,7 @@ class TestStatusStats:
         assert body["demoCount"] == 20
         assert body["docCount"] == 0
         assert body["embedModel"] == "openai/text-embedding-3-small"
-        assert body["genModel"] == "llama-3.3-70b-versatile"
+        assert body["genModel"] == "meta-llama/llama-3.3-70b-instruct"
 
     def test_stats(self, client):
         body = client.get("/api/stats").json()

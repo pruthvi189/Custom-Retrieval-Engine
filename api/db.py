@@ -83,6 +83,26 @@ def query(sql: str, params=None) -> list[dict]:
     conn = get_pool()
     if conn is None:
         raise RuntimeError("no database available")
+    try:
+        return _run(conn, sql, params)
+    except psycopg.OperationalError:
+        # Serverless Postgres drops idle connections (scale-to-zero). The
+        # cached connection is stale - drop it and retry once with a fresh
+        # one before giving up.
+        global _conn
+        with _init_lock:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+            _conn = None
+        conn = get_pool()
+        if conn is None:
+            raise RuntimeError("no database available")
+        return _run(conn, sql, params)
+
+
+def _run(conn, sql: str, params=None) -> list[dict]:
     with _query_lock:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)

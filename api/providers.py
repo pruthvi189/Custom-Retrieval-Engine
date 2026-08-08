@@ -66,6 +66,7 @@ def generate(prompt: str) -> str:
                 "model": GEN_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.7,
+                "max_tokens": 1000,
                 "stream": False,
             },
             timeout=60.0,

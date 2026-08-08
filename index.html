@@ -837,15 +837,13 @@ async function askAI() {
   .then(data => {
     if (data.contexts && data.contexts.length > 0) {
       hitIds = new Set();
-      let sx=0, sy=0, sw=0;
-      data.contexts.forEach((ctx, i) => {
+      data.contexts.forEach((ctx) => {
         const pt = pcaPoints.find(p => p.item.category === 'doc' && ctx.title.startsWith(p.item.metadata));
-        if (pt) {
-          hitIds.add(pt.item.id);
-          const w = 1/(i+1); sx += pt.x*w; sy += pt.y*w; sw += w;
-        }
+        if (pt) hitIds.add(pt.item.id);
       });
-      if (sw > 0) queryPt = {x: sx/sw + (Math.random()-.5)*.015, y: sy/sw + (Math.random()-.5)*.015};
+      const top = data.contexts[0];
+      const topPt = pcaPoints.find(p => p.item.category === 'doc' && top.title.startsWith(p.item.metadata));
+      if (topPt) queryPt = {x: topPt.x + (Math.random()-.5)*.015, y: topPt.y + (Math.random()-.5)*.015};
     } else {
       hitIds = new Set();
       const emb16 = textToEmbedding(question);
@@ -853,12 +851,8 @@ async function askAI() {
         .then(res2=>res2.json())
         .then(data2 => {
           if (data2.results && data2.results.length>0) {
-            let sx=0,sy=0,sw=0;
-            for (let i=0;i<Math.min(3,data2.results.length);i++) {
-              const pt=pcaPoints.find(p=>p.item.id===data2.results[i].id);
-              if(pt){const w=1/(i+1);sx+=pt.x*w;sy+=pt.y*w;sw+=w;}
-            }
-            if(sw>0) queryPt={x:sx/sw+(Math.random()-.5)*.015,y:sy/sw+(Math.random()-.5)*.015};
+            const top = pcaPoints.find(p=>p.item.id===data2.results[0].id);
+            if (top) queryPt = {x: top.x + (Math.random()-.5)*.015, y: top.y + (Math.random()-.5)*.015};
           }
         }).catch(()=>{});
     }
