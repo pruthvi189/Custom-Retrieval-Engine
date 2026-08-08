@@ -81,7 +81,10 @@ def call_planner(prompt: str) -> dict[str, Any]:
         response = providers.generate(prompt)
         try:
             # Extract JSON from response (handle markdown code blocks)
-            json_match = re.search(r"\{.*\}", response, re.DOTALL)
+            # Try to find complete JSON object - non-greedy match
+            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response)
+            if not json_match:
+                json_match = re.search(r"\{.*?\}", response, re.DOTALL)
             if json_match:
                 parsed = json.loads(json_match.group(0))
             else:
