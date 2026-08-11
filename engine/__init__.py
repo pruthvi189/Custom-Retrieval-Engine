@@ -15,13 +15,12 @@ __version__ = "2.0.0"
 
 from .distance import euclidean, cosine, manhattan, get_dist_fn
 from .heaps import Entry, MinHeap, MaxHeap
-from .bruteforce import BruteForce
 from .kdtree import KDTree
 from .hnsw import HNSW
 from .chunking import chunk_text
 from .text_features import graph_embedding
 from .demo import DEMO, load_demo
-from .vectordb import VectorDB, DocumentDB
+from .vectordb import VectorDB, DocumentDB, BruteForce
 
 __all__ = [
     "DIMS",

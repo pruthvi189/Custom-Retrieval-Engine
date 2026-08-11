@@ -181,18 +181,19 @@ Two ways to measure, both honest:
 engine/               pure-Python search core (no numpy on the server path)
   distance.py         euclidean, cosine, manhattan
   heaps.py            MinHeap / MaxHeap on (distance, id)
-  bruteforce.py       the O(n) reference index
   kdtree.py           axis-aligned kd-tree with hyperplane pruning
   hnsw.py             hierarchical navigable small-world graph
   chunking.py         250-word / 30-overlap chunker
   text_features.py    category keywords + graph_embedding (16D)
   demo.py             the 20-item demo corpus
-  item.py             Item dataclass shared by every index
-  vectordb.py         VectorDB (16D, three sync indexes) + DocumentDB (1536D)
+  vectordb.py         Item dataclass + BruteForce baseline + VectorDB
+                      (16D, three sync indexes) + DocumentDB (1536D)
   numpy_ops.py        optional numpy-accelerated distance/top-k (scripts only)
 api/                  FastAPI app (one serverless function)
   index.py            route table: every /api/* endpoint, exact JS contract
   store.py            persistence (in-memory or pgvector), RAG, web ingestion
+  agent.py            ReAct agent loop + background ingestion queue
+  tools.py            agent tool registry (doc_search, wiki_search, web_search)
   providers.py        OpenRouter embeddings + Groq generation clients
   db.py               pg + pgvector schema/connection helpers
 scripts/

@@ -10,6 +10,7 @@ import uuid
 import pytest
 
 import api.db as db
+from conftest import REAL_GET_POOL
 
 
 class TestVecToString:

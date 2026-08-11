@@ -167,7 +167,7 @@ def main():
             print(f"  [PASS] tools={tools_used} sources={len(result['sources'])} iters={result['iterations']}")
             passed += 1
         else:
-            print(f"  [FAIL]")
+            print("  [FAIL]")
             for f in failures:
                 print(f"    - {f}")
             if args.verbose:

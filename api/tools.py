@@ -16,7 +16,6 @@ import os
 from typing import Any
 
 import api.store as store
-from api.background import enqueue_ingestion
 
 
 # ---- Normalized result structure --------------------------------------------------------
@@ -102,6 +101,8 @@ def wiki_search(query: str, max_articles: int = 2, background: bool = False) -> 
         background: If True, enqueue ingestion and return immediately
     """
     if background:
+        # Import here to avoid the agent <-> tools import cycle
+        from api.agent import enqueue_ingestion
         enqueue_ingestion(query, max_articles)
         return ToolResult(
             tool="wiki_search",

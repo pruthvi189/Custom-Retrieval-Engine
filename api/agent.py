@@ -1,14 +1,62 @@
-"""Agent loop implementation - ReAct style with planner, tools, observation, reflection."""
+"""Agent loop implementation - ReAct style with planner, tools, observation, reflection.
+
+Also hosts the small background-ingestion queue (``enqueue_ingestion``) that
+the wiki tool uses to store articles asynchronously, so agent logic stays in
+one module.
+"""
 
 from __future__ import annotations
 
 import json
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
 import api.providers as providers
 import api.tools as tools
+
+
+class BackgroundTaskQueue:
+    """Simple thread-based background task queue for async ingestion.
+
+    In production on Vercel this would be replaced with a proper queue
+    (Redis, SQS, etc.).
+    """
+
+    def __init__(self) -> None:
+        self._queue: list[tuple[callable, tuple, dict]] = []
+        self._lock = threading.Lock()
+        self._worker = threading.Thread(target=self._run, daemon=True)
+        self._worker.start()
+
+    def enqueue(self, func: callable, *args: Any, **kwargs: Any) -> None:
+        with self._lock:
+            self._queue.append((func, args, kwargs))
+
+    def _run(self) -> None:
+        while True:
+            task = None
+            with self._lock:
+                if self._queue:
+                    task = self._queue.pop(0)
+            if task:
+                func, args, kwargs = task
+                try:
+                    func(*args, **kwargs)
+                except Exception:
+                    pass  # Log in production
+            threading.Event().wait(0.5)
+
+
+_background_queue = BackgroundTaskQueue()
+
+
+def enqueue_ingestion(topic: str, max_articles: int = 1) -> None:
+    """Enqueue Wikipedia ingestion to run in background."""
+    # Import here to avoid circular imports (tools -> agent -> store)
+    import api.store as store
+    _background_queue.enqueue(store.web_ingest, topic, max_articles)
 
 PLANNER_SCHEMA = {
     "type": "object",
@@ -99,7 +147,7 @@ def call_planner(prompt: str) -> dict[str, Any]:
                 if parsed["tool"] in ("doc_search", "wiki_search", "web_search", "finish"):
                     return parsed
 
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError):
             if attempt == 0:
                 # Log the response for debugging
                 pass
@@ -260,7 +308,6 @@ def run_agent(question: str, max_iterations: int = MAX_ITERATIONS) -> dict[str, 
 
         tool_name = plan["tool"]
         tool_input = plan["input"]
-        reason = plan.get("reason", "")
 
         if tool_name == "finish":
             state.answer = tool_input

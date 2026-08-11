@@ -6,17 +6,66 @@ endpoint can compare them side by side. Items live in one source of truth
 
 DocumentDB holds chunks of real text embedded with OpenRouter (1536D). Only
 brute-force search for now; doc sets here are small enough that it's fine.
+
+This module also hosts ``Item`` (the unit of data every index stores) and
+``BruteForce`` (the exact O(n) linear-scan baseline) - both are tiny and used
+exclusively here, so they live together instead of as one-file-per-class.
 """
 
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field
+from typing import Optional
 
 from .distance import Vector, cosine, get_dist_fn
-from .bruteforce import BruteForce
+from .heaps import Entry
 from .kdtree import KDTree
 from .hnsw import HNSW
-from .item import Item
+
+
+@dataclass
+class Item:
+    """The unit of data stored in every index."""
+
+    id: int
+    embedding: Vector = field(default_factory=list)
+    metadata: str = ""
+    category: str = ""
+    title: Optional[str] = None
+    text: Optional[str] = None
+
+    def vector_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "metadata": self.metadata,
+            "category": self.category,
+            "embedding": self.embedding,
+        }
+
+
+class BruteForce:
+    """The O(n) reference index every other index gets compared against.
+
+    Stores everything in a flat list and linear-scans per query. The API keeps
+    the pure-Python scan (identical IEEE-754 doubles to the Node original so
+    JSON contracts stay stable); a numpy-accelerated scan lives in
+    :mod:`engine.numpy_ops` for the benchmark scripts.
+    """
+
+    def __init__(self) -> None:
+        self.items: list = []
+
+    def insert(self, v) -> None:
+        self.items.append(v)
+
+    def knn(self, q: Vector, k: int, dist) -> list[Entry]:
+        r = [(dist(q, v.embedding), v.id) for v in self.items]
+        r.sort(key=lambda t: t[0])
+        return [Entry(d=d, id=i) for d, i in r[:k]]
+
+    def remove(self, id: int) -> None:
+        self.items = [v for v in self.items if v.id != id]
 
 
 def _as_item(item) -> Item:

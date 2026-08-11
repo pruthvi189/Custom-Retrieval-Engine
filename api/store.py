@@ -347,8 +347,8 @@ def _embed_chunks(chunk_data: list[tuple[str, str]]) -> list[tuple[str, str, lis
 def _store_chunks(embedded_chunks: list[tuple[str, str, list[float]]]) -> int:
     """Store embedded chunks, return count stored."""
     count = 0
-    for chunk_title, chunk_text, emb in embedded_chunks:
-        store_chunk(chunk_title, chunk_text, emb)
+    for chunk_title, chunk_body, emb in embedded_chunks:
+        store_chunk(chunk_title, chunk_body, emb)
         count += 1
     return count
 
