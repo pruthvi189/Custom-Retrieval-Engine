@@ -112,15 +112,16 @@ question → POST /api/doc/search {question, k}
      → frontend maps each chunk to its 16D doc graph point (longest-prefix match
        of title vs point metadata) → triangle on the top-1 hit's point
      → POST /api/doc/ask {question, k}
-     → same retrieval, then HARD-grounding prompt:
-         LLM sees ONLY the retrieved chunks, must answer from them
-         or reply exactly "Not found in your documents."  (notFound:true)
+     → same retrieval, then a helpful-assistant prompt (mirrors the reference repo):
+         LLM uses the retrieved chunks when relevant, otherwise falls back to
+         its own general knowledge; it must not mention the context. It always
+         answers — never a hard refusal. (notFound:true only when 0 chunks matched)
      → render answer + model name + clickable retrieved contexts
 ```
 
 Rules that keep it honest:
-- Empty DB → special "no documents yet" answer.
-- Nothing above distance 0.7 → `Not found in your documents.` — no guessing.
+- Empty DB or nothing above distance 0.7 → the LLM still answers from general
+  knowledge; the UI offers "Search the web for more" to ingest sources.
 - The triangle only ever sits on a retrieved chunk's own graph point.
 
 ### 5.4 Agentic research (Agent tab)

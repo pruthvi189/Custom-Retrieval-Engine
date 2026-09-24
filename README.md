@@ -27,7 +27,7 @@ The demo needs **zero API keys** for vector search, benchmarking, and the visual
 - **Brute Force baseline** — the honest O(n) reference every other index is compared against.
 - **Live side-by-side benchmarking** — one query, all three algorithms, microsecond timings.
 - **Document Store** — arbitrary text chunked (250 words / 30 overlap) and embedded at 1536D.
-- **Grounded RAG** — the LLM only ever sees retrieved chunks; it answers strictly from them or says `Not found in your documents.`
+- **Helpful RAG** — retrieved chunks are passed to the LLM when relevant; otherwise it answers from its own general knowledge (like the reference repo), never dead-ending on a refusal.
 - **Agentic document ingestion** — hand it a topic and it researches, chunks, embeds, and stores the knowledge automatically.
 - **Wikipedia ingestion** — no API key required, via the MediaWiki API.
 - **Multiple similarity metrics** — euclidean, cosine, and manhattan.
@@ -105,8 +105,8 @@ text → chunk → embed → index → retrieve → ground → generate
 2. **Embedding** — every chunk is embedded with OpenRouter (`text-embedding-3-small`, 1536D).
 3. **Indexing** — chunk vectors go into the document store (brute-force, fine at this scale). The 16D demo index is kept in sync across HNSW, KD-Tree, and brute force.
 4. **Retrieval** — the query is embedded the same way; cosine distance picks the top-k chunks, filtered by a similarity threshold of `0.7`.
-5. **Grounding** — only chunks that actually matched are handed to the model, each labeled with its source title.
-6. **Generation** — Groq (`llama-3.3-70b-versatile`) answers from that context alone. Empty database or nothing above threshold → `Not found in your documents.` with a `notFound: true` flag. No guessing.
+5. **Grounding** — matching chunks are handed to the model, each labeled with its source title.
+6. **Generation** — Groq (`llama-3.3-70b-versatile`) answers using that context when relevant, otherwise from general knowledge; it always answers. `notFound: true` is set only when no chunk matched, which surfaces the "Search the web for more" option.
 
 > [!NOTE]
 > The same distance functions back every path — `euclidean`, `cosine` (returned as `1 − similarity` so one code path handles all metrics), and `manhattan`.

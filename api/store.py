@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
@@ -32,30 +31,6 @@ _WIKI_UA = "CustomRetrievalEngine-RAG/1.0 (RAG demo; contact: pruthvi189@users.n
 # ---- Common helpers --------------------------------------------------------------------
 
 DISTANCE_THRESHOLD = 0.7
-DEMO_DISTANCE_THRESHOLD = 0.1
-
-
-def _search_demo_16d(question: str, k: int) -> list[dict]:
-    """Retrieve from the built-in 16D demo vectors (the app's own knowledge base).
-
-    Used as the answer source when no documents have been inserted yet, so Ask AI
-    still answers from the vectors this project created rather than the empty
-    document store.
-    """
-    if vdb.size() == 0:
-        return []
-    res = vdb.search(graph_embedding(question), k, "cosine", "hnsw")
-    return [
-        {
-            "id": h["id"],
-            "title": h["metadata"],
-            "text": h["metadata"],
-            "distance": h["distance"],
-            "category": h["category"],
-        }
-        for h in res["hits"]
-        if h["distance"] <= DEMO_DISTANCE_THRESHOLD
-    ]
 
 
 def _embed_query(question: str) -> list[float] | None:
@@ -269,74 +244,37 @@ def doc_search(question: str, k: int) -> dict:
 
 def doc_ask(question: str, k: int) -> dict:
     ensure_demo()
-    q_emb = _embed_query(question)
-    if not q_emb:
-        return _embedding_error()
-
     doc_count = _get_doc_count()
-    hits = _search_doc_chunks(q_emb, k, include_text=True)
 
-    if doc_count == 0:
-        demo_hits = _search_demo_16d(question, k)
-        if demo_hits:
-            ctx = "".join(f"[{i + 1}] {h['title']}\n" for i, h in enumerate(demo_hits))
-            prompt = (
-                "You are a helpful assistant. Answer the user's question using the built-in "
-                "knowledge snippets below as the primary basis, and elaborate clearly and "
-                "accurately. If the snippets are unrelated to the question, say so.\n\n"
-                "Knowledge:\n" + ctx +
-                "Question: " + question + "\n\n"
-                "Answer:"
-            )
-            answer = providers.generate(prompt)
-            contexts = [
-                {"id": h["id"], "title": h["title"], "distance": h["distance"]}
-                for h in demo_hits
-            ]
-            return {
-                "answer": answer,
-                "model": providers.GEN_MODEL,
-                "contexts": contexts,
-                "docCount": doc_count,
-                "notFound": False,
-                "source": "demo16d",
-            }
-        return {
-            "answer": 'No documents in the database yet. Use "Search the web for more" below to fetch knowledge about this topic.',
-            "model": providers.GEN_MODEL,
-            "contexts": [],
-            "docCount": doc_count,
-            "notFound": True,
-        }
-
-    if not hits:
-        return {
-            "answer": "Not found in your documents.",
-            "model": providers.GEN_MODEL,
-            "contexts": [],
-            "docCount": doc_count,
-            "notFound": True,
-        }
+    hits: list[dict] = []
+    if doc_count > 0:
+        q_emb = _embed_query(question)
+        if not q_emb:
+            return _embedding_error()
+        hits = _search_doc_chunks(q_emb, k, include_text=True)
 
     ctx = "".join(f"[{i + 1}] {h['title']}:\n{h['text']}\n\n" for i, h in enumerate(hits))
     prompt = (
-        "You are a RAG assistant grounded strictly in the provided context. "
-        "Answer the user's question using ONLY the context below. "
-        "If the context does not contain enough information to answer, reply exactly: Not found in your documents. "
-        "Do not use your own general knowledge. Do not mention the context.\n\n"
+        "You are a helpful assistant. Answer the user's question directly. "
+        "Use the provided context if it contains relevant information. "
+        "If it doesn't, just use your own general knowledge. "
+        "IMPORTANT: Do NOT mention the 'context', 'provided text', or say things like "
+        "'the context doesn't mention'. Just answer the question naturally.\n\n"
         "Context:\n" + ctx +
         "Question: " + question + "\n\n"
         "Answer:"
     )
     answer = providers.generate(prompt)
-    not_found = bool(re.search(r"not found in your documents", answer, re.IGNORECASE))
-    contexts = [{"id": h["id"], "title": h["title"], "distance": h["distance"]} for h in hits]
+    contexts = [
+        {"id": h["id"], "title": h["title"], "distance": h["distance"], "text": h["text"]}
+        for h in hits
+    ]
     return {
         "answer": answer,
         "model": providers.GEN_MODEL,
         "contexts": contexts,
         "docCount": doc_count,
-        "notFound": not_found,
+        "notFound": len(hits) == 0,
     }
 
 

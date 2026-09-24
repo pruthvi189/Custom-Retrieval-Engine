@@ -97,17 +97,19 @@ class TestDocAsk:
         assert r.status_code == 400
         assert r.json() == {"error": "need question"}
 
-    def test_empty_database_never_calls_generate(self, client, monkeypatch):
-        calls = []
-        monkeypatch.setattr("api.providers.generate", lambda p: calls.append(p) or "SHOULD NOT HAPPEN")
+    def test_empty_database_still_answers(self, client, monkeypatch):
+        prompts = []
+        monkeypatch.setattr("api.providers.generate", lambda p: prompts.append(p) or "A general answer.")
         r = client.post("/api/doc/ask", json={"question": "anything"})
         body = r.json()
         assert r.status_code == 200
         assert body["notFound"] is True
         assert body["docCount"] == 0
         assert body["contexts"] == []
-        assert "No documents in the database yet" in body["answer"]
-        assert calls == []
+        assert body["answer"] == "A general answer."
+        assert len(prompts) == 1
+        assert "just use your own general knowledge" in prompts[0]
+        assert "Question: anything" in prompts[0]
 
     def test_grounded_answer_uses_context(self, client, monkeypatch):
         insert_doc(client)
@@ -132,20 +134,23 @@ class TestDocAsk:
         assert DOC_TEXT in prompt
         assert "Question: " + Q_MATCH in prompt
 
-    def test_generation_not_found_flag(self, client, monkeypatch):
+    def test_not_found_flag_reflects_hits(self, client, monkeypatch):
         insert_doc(client)
-        monkeypatch.setattr("api.providers.generate", lambda p: "Not found in your documents.")
+        monkeypatch.setattr("api.providers.generate", lambda p: "Paris.")
         body = client.post("/api/doc/ask", json={"question": Q_MATCH}).json()
-        assert body["notFound"] is True
+        assert body["notFound"] is False
         assert len(body["contexts"]) == 1
 
-    def test_docs_exist_but_no_close_context(self, client):
+    def test_docs_exist_but_no_close_context(self, client, monkeypatch):
         insert_doc(client)
+        prompts = []
+        monkeypatch.setattr("api.providers.generate", lambda p: prompts.append(p) or "A general answer.")
         body = client.post("/api/doc/ask", json={"question": Q_MISS}).json()
         assert body["notFound"] is True
         assert body["contexts"] == []
-        assert body["answer"] == "Not found in your documents."
+        assert body["answer"] == "A general answer."
         assert body["docCount"] == 1
+        assert "Context:\nQuestion: " + Q_MISS in prompts[0]
 
 
 class TestDocDelete:
