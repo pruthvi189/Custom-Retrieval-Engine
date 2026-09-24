@@ -47,10 +47,10 @@ class Item:
 class BruteForce:
     """The O(n) reference index every other index gets compared against.
 
-    Stores everything in a flat list and linear-scans per query. The API keeps
-    the pure-Python scan (identical IEEE-754 doubles to the Node original so
-    JSON contracts stay stable); a numpy-accelerated scan lives in
-    :mod:`engine.numpy_ops` for the benchmark scripts.
+    Stores everything in a flat list and linear-scans per query with the
+    shared numpy-backed distance functions (the API rounds distances to 6
+    decimals, so JSON contracts stay stable). The vectorized batch form in
+    :mod:`engine.numpy_ops` is reserved for the benchmark scripts.
     """
 
     def __init__(self) -> None:

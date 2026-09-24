@@ -1,7 +1,8 @@
-"""Distance metrics.
+"""Distance metrics, vectorized with numpy.
 
 Euclidean and manhattan are plain L2/L1; cosine is returned as a "distance"
-too (1 - similarity) so the same code path works for all three.
+too (1 - similarity) so the same code path works for all three. Results are
+returned as builtin ``float`` (numpy scalars are not JSON-serializable).
 """
 
 from __future__ import annotations
@@ -9,25 +10,22 @@ from __future__ import annotations
 from math import sqrt
 from typing import Callable
 
+import numpy as np
+
 Vector = list[float]
 
 
 def euclidean(a: Vector, b: Vector) -> float:
-    s = 0.0
-    for i in range(len(a)):
-        d = a[i] - b[i]
-        s += d * d
-    return sqrt(s)
+    diff = np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64)
+    return float(sqrt(float(diff @ diff)))
 
 
 def cosine(a: Vector, b: Vector) -> float:
-    dot = 0.0
-    na = 0.0
-    nb = 0.0
-    for i in range(len(a)):
-        dot += a[i] * b[i]
-        na += a[i] * a[i]
-        nb += b[i] * b[i]
+    va = np.asarray(a, dtype=np.float64)
+    vb = np.asarray(b, dtype=np.float64)
+    dot = float(va @ vb)
+    na = float(va @ va)
+    nb = float(vb @ vb)
     # degenerate vectors: treat as maximally dissimilar
     if na < 1e-9 or nb < 1e-9:
         return 1.0
@@ -35,10 +33,8 @@ def cosine(a: Vector, b: Vector) -> float:
 
 
 def manhattan(a: Vector, b: Vector) -> float:
-    s = 0.0
-    for i in range(len(a)):
-        s += abs(a[i] - b[i])
-    return s
+    diff = np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64)
+    return float(np.abs(diff).sum())
 
 
 def get_dist_fn(m: str) -> Callable[[Vector, Vector], float]:

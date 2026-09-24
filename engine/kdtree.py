@@ -1,14 +1,23 @@
 """kd-tree.
 
-Splits on one dimension per level (axis cycles through 0..dims), so lookups
-are O(log n) in the best case. Deletions are handled by rebuilding the whole
-tree from scratch - fine at this scale.
+euclidean and manhattan k-NN go through :class:`scipy.spatial.cKDTree` - the
+tree build and pruning are library-owned. Cosine has no kd-tree library
+equivalent, so that metric keeps the small hand-written axis-cycling tree
+below (splits cycle one dimension per level, hyperplane pruning during k-NN).
+Deletions rebuild the whole structure from scratch - fine at this scale.
 """
 
 from __future__ import annotations
 
-from .distance import Vector
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from .distance import Vector, euclidean, manhattan
 from .heaps import Entry, MaxHeap
+
+if TYPE_CHECKING:
+    from scipy.spatial import cKDTree
 
 
 class KDNode:
@@ -20,10 +29,22 @@ class KDNode:
         self.right = None
 
 
+def _minkowski_p(dist) -> int | None:
+    """Map a distance function onto scipy's Minkowski ``p`` (None = hand path)."""
+    name = getattr(dist, "__name__", "")
+    if dist is euclidean or name == "euclidean":
+        return 2
+    if dist is manhattan or name == "manhattan":
+        return 1
+    return None
+
+
 class KDTree:
     def __init__(self, dims: int) -> None:
         self.dims = dims
         self.root: KDNode | None = None
+        self._items: list = []
+        self._scipy: cKDTree | None = None
 
     def _insert(self, n: KDNode | None, v, d: int) -> KDNode:
         if n is None:
@@ -36,7 +57,16 @@ class KDTree:
         return n
 
     def insert_item(self, item) -> None:
+        self._items.append(item)
         self.root = self._insert(self.root, item, 0)
+        self._scipy = None
+
+    def rebuild(self, items) -> None:
+        self._items = list(items)
+        self.root = None
+        for v in self._items:
+            self.root = self._insert(self.root, v, 0)
+        self._scipy = None
 
     def _knn_rec(self, n: KDNode | None, q: Vector, k: int, d: int, dist, heap: MaxHeap) -> None:
         if n is None:
@@ -56,7 +86,7 @@ class KDTree:
         if heap.size < k or abs(diff) < heap.peek().d:
             self._knn_rec(farther, q, k, d + 1, dist, heap)
 
-    def knn(self, q: Vector, k: int, dist) -> list[Entry]:
+    def _knn_hand(self, q: Vector, k: int, dist) -> list[Entry]:
         heap = MaxHeap()
         self._knn_rec(self.root, q, k, 0, dist, heap)
         r = []
@@ -65,7 +95,30 @@ class KDTree:
         r.sort(key=lambda e: e.d)
         return r
 
-    def rebuild(self, items) -> None:
-        self.root = None
-        for v in items:
-            self.root = self._insert(self.root, v, 0)
+    def _knn_scipy(self, q: Vector, k: int, dist, p: int) -> list[Entry]:
+        if not self._items:
+            return []
+        if self._scipy is None:
+            from scipy.spatial import cKDTree
+
+            self._scipy = cKDTree(
+                np.asarray([v.embedding for v in self._items], dtype=np.float64)
+            )
+        # over-fetch a few neighbours so the final top-k is ranked with the
+        # project's own distance functions (bit-identical to brute force)
+        pool = min(len(self._items), k + 8)
+        _, idx = self._scipy.query(np.asarray(q, dtype=np.float64), k=pool, p=p)
+        out = [
+            Entry(d=float(dist(q, self._items[int(i)].embedding)), id=self._items[int(i)].id)
+            for i in np.atleast_1d(idx)
+        ]
+        out.sort(key=lambda e: e.d)
+        return out[:k]
+
+    def knn(self, q: Vector, k: int, dist) -> list[Entry]:
+        if k <= 0:
+            return []
+        p = _minkowski_p(dist)
+        if p is None:
+            return self._knn_hand(q, k, dist)
+        return self._knn_scipy(q, k, dist, p)

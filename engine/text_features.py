@@ -14,6 +14,9 @@ KW: dict[str, list[str]] = {
         "node", "search", "insert", "bfs", "dfs", "heap", "trie", "database", "index",
         "query", "sql", "vector", "embedding", "semantic", "network", "distributed",
         "cache", "memory", "runtime", "thread", "process", "async", "library", "framework",
+        "hnsw", "kdtree", "kd", "brute", "retrieval", "nearest", "neighbor", "approximate",
+        "cosine", "euclidean", "manhattan", "similarity", "metric", "chunk", "llm", "token",
+        "prompt", "neural",
     ],
     "math": [
         "calculus", "matrix", "probability", "theorem", "integral", "derivative", "linear",
@@ -50,7 +53,7 @@ def graph_embedding(text: str) -> list[float]:
     for w in ws:
         for cat, kws in KW.items():
             for kw in kws:
-                if kw in w or w.startswith(kw):
+                if kw in w or w.startswith(kw) or (len(w) >= 3 and kw.startswith(w)):
                     s[cat] += 0.35
                     break
     mx = max(list(s.values()) + [0.01])

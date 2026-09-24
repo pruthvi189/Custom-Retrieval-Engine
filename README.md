@@ -1,11 +1,11 @@
 # Custom Retrieval Engine
 
-A vector retrieval engine built **from scratch** — HNSW, KD-Tree, and brute-force search implemented by hand in pure Python, backed by a chunked document store and a grounded RAG pipeline. Everything runs as Vercel serverless Python functions behind a single-page UI.
+A vector retrieval engine built **from scratch** — HNSW written by hand, KD-Tree on scipy, heaps on stdlib `heapq`, numpy-backed distance metrics — backed by a chunked document store and a grounded RAG pipeline. Everything runs as Vercel serverless Python functions behind a single-page UI.
 
-I've always wondered what actually lives inside tools like Pinecone or Weaviate. So instead of importing one, I wrote the whole thing — distance metrics, heaps, the indexes, the chunker, the RAG glue — by hand, small enough to read front to back.
+I've always wondered what actually lives inside tools like Pinecone or Weaviate. So instead of importing one, I built the core myself — HNSW hand-written, heaps on `heapq`, the kd-tree on scipy, numpy metrics, plus the chunker and the RAG glue — small enough to read front to back.
 
 > [!IMPORTANT]
-> Unlike most RAG projects, this does **not** rely on an existing vector database for the core engine. The three search indexes — **HNSW**, **KD-Tree**, and **Brute Force** — are implemented directly in `engine/`, and a live benchmark lets you time all three against the same query.
+> Unlike most RAG projects, this does **not** rely on an existing vector database for the core engine. The three search indexes — **HNSW** (hand-written graph), **KD-Tree** (scipy + a hand-kept cosine path), and **Brute Force** — all live in `engine/`, and a live benchmark lets you time all three against the same query.
 
 ---
 
@@ -23,7 +23,7 @@ The demo needs **zero API keys** for vector search, benchmarking, and the visual
 ## Key Features
 
 - **Custom HNSW** — hierarchical navigable small-world graph (`M=16`, `ef_construction=200`, `ef_search=50`), built and maintained in code.
-- **Custom KD-Tree** — axis-aligned binary space partitioning with hyperplane pruning during k-NN.
+- **Custom KD-Tree** — scipy `cKDTree` for euclidean/manhattan plus a hand-written cosine path, with hyperplane pruning during k-NN.
 - **Brute Force baseline** — the honest O(n) reference every other index is compared against.
 - **Live side-by-side benchmarking** — one query, all three algorithms, microsecond timings.
 - **Document Store** — arbitrary text chunked (250 words / 30 overlap) and embedded at 1536D.
@@ -178,11 +178,11 @@ Two ways to measure, both honest:
 ## Project Structure
 
 ```
-engine/               pure-Python search core (no numpy on the server path)
-  distance.py         euclidean, cosine, manhattan
-  heaps.py            MinHeap / MaxHeap on (distance, id)
-  kdtree.py           axis-aligned kd-tree with hyperplane pruning
-  hnsw.py             hierarchical navigable small-world graph
+engine/               vector search core (heapq · scipy · numpy)
+  distance.py         euclidean, cosine, manhattan (numpy-backed)
+  heaps.py            MinHeap / MaxHeap on (distance, id) via heapq
+  kdtree.py           scipy cKDTree (euclidean/manhattan) + hand cosine path
+  hnsw.py             hierarchical navigable small-world graph (hand-written)
   chunking.py         250-word / 30-overlap chunker
   text_features.py    category keywords + graph_embedding (16D)
   demo.py             the 20-item demo corpus

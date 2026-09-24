@@ -55,7 +55,7 @@ class ToolResult:
 
 # ---- Tool implementations ---------------------------------------------------------------
 
-_WIKI_UA = "CustomRetrievalEngine-RAG/1.0"
+_WIKI_UA = "CustomRetrievalEngine-RAG/1.0 (RAG demo; contact: pruthvi189@users.noreply.github.com)"
 _TAVILY_KEY = os.environ.get("TAVILY_API_KEY")
 
 

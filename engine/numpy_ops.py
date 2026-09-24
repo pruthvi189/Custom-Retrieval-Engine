@@ -1,8 +1,7 @@
 """numpy-accelerated distance + top-k.
 
-Only used by the benchmark scripts and opt-in fast paths - never by the
-server hot path (which stays pure Python to keep float results identical to
-the original and cold starts fast). Imported lazily.
+Used by the benchmark scripts: the batch/matrix form of what
+:mod:`engine.distance` now does per-pair on the server path. Imported lazily.
 """
 
 from __future__ import annotations

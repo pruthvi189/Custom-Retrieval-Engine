@@ -450,7 +450,7 @@ function switchTab(name) {
 }
 
 const KW = {
-  cs:     ['algorithm','data','tree','graph','array','linked','hash','stack','queue','sort','binary','dynamic','programming','recursion','complexity','pointer','node','search','insert','bfs','dfs','heap','trie','database','index','query','sql','vector','embedding','semantic','network','distributed','cache','memory','runtime','thread','process','async','library','framework'],
+  cs:     ['algorithm','data','tree','graph','array','linked','hash','stack','queue','sort','binary','dynamic','programming','recursion','complexity','pointer','node','search','insert','bfs','dfs','heap','trie','database','index','query','sql','vector','embedding','semantic','network','distributed','cache','memory','runtime','thread','process','async','library','framework','hnsw','kdtree','kd','brute','retrieval','nearest','neighbor','approximate','cosine','euclidean','manhattan','similarity','metric','chunk','llm','token','prompt','neural'],
   math:   ['calculus','matrix','probability','theorem','integral','derivative','linear','algebra','equation','function','prime','modular','combinatorics','permutation','eigenvalue','statistics','proof','geometry','trig','logarithm','limit','sequence','series','fraction','ratio'],
   food:   ['food','pizza','sushi','ramen','pasta','recipe','cook','eat','restaurant','dish','ingredient','flavor','spice','noodle','bread','croissant','taco','fish','rice','soup','biryani','curry','kebab','tikka','samosa','dosa','naan','paneer','masala','burger','fries','steak','chicken','beef','pork','lamb','cheese','egg','meat','grill','barbecue','roast','fried','salad','sandwich','pancake','waffle','cake','cookie','pie','pastry','chocolate','dessert','cream','coffee','tea','wine','beer','juice','tomato','onion','garlic','mango','banana'],
   sports: ['sport','basketball','football','tennis','chess','swim','game','play','score','team','athlete','competition','match','tournament','olympic','dribble','tackle','serve','soccer','cricket','hockey','golf','boxing','wrestling','cycling','running','marathon','yoga','gym','fitness','baseball','volleyball','rugby','badminton']
@@ -461,7 +461,7 @@ function textToEmbedding(text) {
   const s = {cs:0,math:0,food:0,sports:0};
   for (const w of ws)
     for (const [cat, kws] of Object.entries(KW))
-      for (const kw of kws) if (w.includes(kw)||kw.startsWith(w)) { s[cat]+=0.35; break; }
+      for (const kw of kws) if (w.includes(kw)||w.startsWith(kw)||(w.length>=3&&kw.startsWith(w))) { s[cat]+=0.35; break; }
   const mx = Math.max(...Object.values(s), 0.01);
   const n = v => Math.min(v/mx*0.88, 0.94);
   const jitter = () => (Math.random()-.5)*.04;

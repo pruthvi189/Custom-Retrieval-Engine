@@ -20,7 +20,7 @@ An advanced-README walkthrough of the whole system: every flow from start to fin
                                     api/tools.py
                       │
                       ▼
-               engine/ (pure-Python vector search core)
+               engine/ (vector search core: heapq · scipy · numpy)
                ─────────────────────────────────────────────────
                distance.py · heaps.py · kdtree.py · hnsw.py
                chunking.py · text_features.py · demo.py · vectordb.py
@@ -30,7 +30,7 @@ An advanced-README walkthrough of the whole system: every flow from start to fin
               PostgreSQL + pgvector (only if DATABASE_URL/POSTGRES_URL set)
 ```
 
-Everything is served by one FastAPI app (`api/index.py`) running as a single Vercel serverless function. The frontend is one vanilla-JS `index.html`. The vector-search indexes are hand-written in `engine/` — no external vector database.
+Everything is served by one FastAPI app (`api/index.py`) running as a single Vercel serverless function. The frontend is one vanilla-JS `index.html`. The vector-search indexes live in `engine/` — HNSW hand-written, kd-tree on scipy (plus a hand-kept cosine path), heaps on `heapq` — no external vector database.
 
 ---
 
@@ -49,16 +49,16 @@ Everything is served by one FastAPI app (`api/index.py`) running as a single Ver
 
 ## 3. The engine core (`engine/`)
 
-- `distance.py` — `euclidean`, `cosine` (returned as `1 - similarity` so one code path handles every metric), `manhattan`, and `get_dist_fn`.
-- `heaps.py` — `MinHeap`/`MaxHeap` on `(distance, id)`.
-- `kdtree.py` — axis-aligned kd-tree with hyperplane pruning during k-NN; exact, best under ~20 dims; delete rebuilds the tree.
-- `hnsw.py` — hierarchical navigable small-world graph (`M=16`, `ef_construction=200`, `ef_search=50`); approximate; deletion severs back-references.
+- `distance.py` — `euclidean`, `cosine` (returned as `1 - similarity` so one code path handles every metric), `manhattan`, and `get_dist_fn`; numpy-backed, returning builtin `float`.
+- `heaps.py` — `MinHeap`/`MaxHeap` on `(distance, id)`, backed by stdlib `heapq`.
+- `kdtree.py` — scipy `cKDTree` for euclidean/manhattan k-NN, hand-written axis-cycling tree with hyperplane pruning for cosine; exact, best under ~20 dims; delete rebuilds the tree.
+- `hnsw.py` — hierarchical navigable small-world graph (`M=16`, `ef_construction=200`, `ef_search=50`); approximate; deletion severs back-references; hand-written.
 - `chunking.py` — `chunk_text(text, 250, 30)`: sliding 250-word windows with 30-word overlap (step 220).
 - `text_features.py` — `graph_embedding(text)` → deterministic 16D vector from keyword hits across 4 buckets (cs/math/food/sports). No jitter server-side.
 - `demo.py` — fixed 20-item demo corpus (cs/math/food/sports).
 - `vectordb.py` — `Item` dataclass + `BruteForce` (the O(n) reference baseline) + `VectorDB` (16D, three sync indexes) + `DocumentDB` (1536D, brute force).
 
-No numpy on the server hot path — the engine is dependency-light for cold-start speed.
+No external vector database anywhere — heaps come from stdlib `heapq`, euclidean/manhattan k-NN from scipy `cKDTree`, metrics from numpy, and HNSW is hand-written.
 
 ---
 

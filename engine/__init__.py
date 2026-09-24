@@ -1,12 +1,11 @@
-"""Custom Retrieval Engine - pure-Python vector search core.
+"""Custom Retrieval Engine - vector search core.
 
 Started as a port of a C++ experiment (via a Node.js intermediate) and ended
 up its own thing: three search indexes (brute force, kd-tree, HNSW) plus a
-chunked document store for RAG. All of it implemented by hand in numpy-free
-pure Python so the API path stays dependency-light and cold-start fast.
-
-numpy lives only in :mod:`engine.numpy_ops` and is used by the benchmark
-scripts and opt-in fast paths - never by the server hot path.
+chunked document store for RAG. Libraries own the pieces that have good ones -
+stdlib ``heapq`` for the heaps, ``scipy.spatial.cKDTree`` for euclidean and
+manhattan k-NN, numpy for the distance metrics - while HNSW and the cosine
+kd-tree stay hand-written.
 """
 
 DIMS = 16
